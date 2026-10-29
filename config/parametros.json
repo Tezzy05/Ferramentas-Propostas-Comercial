@@ -1,0 +1,24 @@
+{
+  "empresa": {
+    "razao_social": "AMBIPAR ENVIRONMENT RESIDENTIAL COLLECTION S.A",
+    "cnpj": "10.652.751/0001-46",
+    "nome_curto": "Ambipar"
+  },
+  "proposta": {
+    "prefixo_numero": "AMB",
+    "validade_dias": 30,
+    "condicoes": "Valores expressos em reais (R$). Massa a compensar calculada sobre o volume autodeclarado pelo cliente e a meta de compensação de cada ano. Pagamento e prazos conforme proposta comercial."
+  },
+  "precos_por_tonelada": {
+    "PAPEL/PAPELÃO": 0,
+    "PLÁSTICO": 0,
+    "VIDRO": 0,
+    "AÇO/FERRO": 0,
+    "ALUMÍNIO": 0,
+    "LONGA VIDA": 0,
+    "ISOPOR": 0,
+    "BOPP": 0,
+    "AEROSSOL": 0,
+    "OUTRO MATERIAL": 0
+  }
+}

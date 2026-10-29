@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Propostas Comerciais · Ambipar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+<script>
+  // Esconde os painéis até a animação de entrada; volta ao normal se o JS falhar.
+  document.documentElement.classList.add("js-anim");
+  setTimeout(() => document.documentElement.classList.remove("js-anim"), 2500);
+</script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#cliente">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">ambipar</span>
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-product">Propostas</span>
+    </a>
+    <nav class="steps" aria-label="Etapas">
+      <a href="#cliente" class="step-pill" data-step="cliente"><span>1</span>Cliente</a>
+      <a href="#volumes" class="step-pill" data-step="volumes"><span>2</span>Volumes</a>
+      <a href="#precos" class="step-pill" data-step="precos"><span>3</span>Preços</a>
+    </nav>
+    <div class="topbar-actions">
+      <span class="save-state" id="saveState">Rascunho salvo neste navegador</span>
+      <button class="btn btn-outline btn-sm" id="novaProposta" type="button">Nova proposta</button>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <div class="workspace">
+
+    <section class="panel reveal" id="cliente">
+      <div class="panel-head">
+        <span class="panel-index">01</span>
+        <div>
+          <h2>Cliente e proposta</h2>
+          <p>Dados que vão para o cabeçalho do PDF e para os marcadores do PowerPoint.</p>
+        </div>
+      </div>
+
+      <div class="fields">
+        <label class="field span-2">
+          <span>Razão social <em>*</em></span>
+          <input type="text" data-bind="cliente.razao_social" placeholder="Nome da empresa cliente" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>CNPJ</span>
+          <input type="text" data-bind="cliente.cnpj" data-mask="cnpj" placeholder="00.000.000/0000-00" inputmode="numeric">
+        </label>
+        <label class="field">
+          <span>Cidade / UF</span>
+          <input type="text" data-bind="cliente.cidade_uf" placeholder="São Paulo / SP">
+        </label>
+        <label class="field">
+          <span>Contato</span>
+          <input type="text" data-bind="cliente.contato" placeholder="Nome de quem recebe a proposta">
+        </label>
+        <label class="field">
+          <span>E-mail do contato</span>
+          <input type="email" data-bind="cliente.email" placeholder="contato@cliente.com.br">
+        </label>
+        <label class="field">
+          <span>Telefone</span>
+          <input type="tel" data-bind="cliente.telefone" placeholder="(11) 90000-0000">
+        </label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="fields fields-4">
+        <label class="field">
+          <span>Nº da proposta</span>
+          <input type="text" data-bind="proposta.numero">
+        </label>
+        <label class="field">
+          <span>Data</span>
+          <input type="date" data-bind="proposta.data">
+        </label>
+        <label class="field">
+          <span>Validade (dias)</span>
+          <input type="text" inputmode="numeric" data-bind="proposta.validade_dias">
+        </label>
+        <label class="field">
+          <span>Válida até</span>
+          <input type="text" id="validadeAte" readonly tabindex="-1">
+        </label>
+        <label class="field span-2">
+          <span>Responsável comercial</span>
+          <input type="text" data-bind="proposta.responsavel" placeholder="Seu nome">
+        </label>
+        <label class="field span-2">
+          <span>E-mail do responsável</span>
+          <input type="email" data-bind="proposta.email_responsavel" placeholder="voce@ambipar.com">
+        </label>
+        <label class="field span-4">
+          <span>Observações da proposta</span>
+          <textarea rows="2" data-bind="proposta.observacoes" placeholder="Opcional: condições específicas, prazos, premissas…"></textarea>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel reveal" id="volumes">
+      <div class="panel-head">
+        <span class="panel-index">02</span>
+        <div>
+          <h2>Volumes declarados</h2>
+          <p>Peso gerado em toneladas, por estado e material. Gera a planilha no padrão de importação.</p>
+        </div>
+      </div>
+
+      <div class="year-bar">
+        <div class="segmented" id="yearTabs" role="tablist" aria-label="Ano de compensação"></div>
+        <div class="year-meta" id="yearMeta"></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <label class="btn btn-ghost btn-sm file-btn">
+            <input type="file" id="importFile" accept=".xlsx">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12"/></svg>
+            Importar planilha
+          </label>
+          <button class="btn btn-ghost btn-sm" id="limparAno" type="button">Limpar ano</button>
+          <label class="switch">
+            <input type="checkbox" id="soPreenchidos">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            Só estados preenchidos
+          </label>
+        </div>
+        <span class="hint">Cole direto do Excel com <kbd>Ctrl</kbd>+<kbd>V</kbd> · <kbd>Enter</kbd> desce uma linha</span>
+      </div>
+
+      <div class="grid-wrap" id="gridWrap">
+        <table class="grid" id="grid">
+          <thead id="gridHead"></thead>
+          <tbody id="gridBody"></tbody>
+          <tfoot id="gridFoot"></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal" id="precos">
+      <div class="panel-head">
+        <span class="panel-index">03</span>
+        <div>
+          <h2>Meta e preços</h2>
+          <p>Massa a compensar = declarado × meta do ano. Valor = massa a compensar × preço por tonelada.</p>
+        </div>
+      </div>
+
+      <h3 class="sub">Meta de compensação por ano</h3>
+      <div class="metas" id="metas"></div>
+
+      <h3 class="sub">Preço por tonelada compensada</h3>
+      <div class="price-table" id="priceTable"></div>
+
+      <div class="fields fields-4 price-extras">
+        <label class="field">
+          <span>Desconto (%)</span>
+          <input type="text" inputmode="decimal" data-bind="comercial.desconto_percentual" data-num placeholder="0">
+        </label>
+        <label class="field span-3">
+          <span>Nome para "Outro material"</span>
+          <input type="text" data-bind="comercial.outro_material_nome" placeholder="Ex.: Madeira (usado no PDF e no PPT)">
+        </label>
+      </div>
+    </section>
+
+    <footer class="foot">
+      {{ empresa.razao_social }} · CNPJ {{ empresa.cnpj }}
+    </footer>
+  </div>
+
+  <aside class="summary reveal" aria-label="Resumo da proposta">
+    <div class="summary-card">
+      <div class="summary-top">
+        <span class="tag tag-lime" id="sumNumero">—</span>
+        <h3 id="sumCliente">Cliente não informado</h3>
+      </div>
+
+      <div class="summary-total">
+        <span>Valor total</span>
+        <strong id="sumTotal">R$ 0,00</strong>
+        <small id="sumDesconto"></small>
+      </div>
+
+      <dl class="summary-stats">
+        <div><dt>Declarado</dt><dd id="sumDeclarado">0 t</dd></div>
+        <div><dt>A compensar</dt><dd id="sumCompensar">0 t</dd></div>
+        <div><dt>Estados</dt><dd id="sumEstados">0</dd></div>
+        <div><dt>Anos</dt><dd id="sumAnos">—</dd></div>
+      </dl>
+
+      <div class="summary-bars" id="sumBars"></div>
+
+      <ul class="alerts" id="alerts"></ul>
+
+      <div class="actions">
+        <button class="action" id="btnExcel" type="button">
+          <span class="action-icon">XLS</span>
+          <span class="action-text"><b>Gerar planilha</b><small>Autodeclaração no modelo oficial</small></span>
+        </button>
+        <button class="action" id="btnPpt" type="button">
+          <span class="action-icon">PPT</span>
+          <span class="action-text"><b>Atualizar proposta</b><small>Proposta comercial com os dados</small></span>
+        </button>
+        <button class="action action-primary" id="btnPdf" type="button">
+          <span class="action-icon">PDF</span>
+          <span class="action-text"><b>Gerar PDF técnico</b><small>Volumes, metas e valores</small></span>
+        </button>
+      </div>
+
+      <button class="link-btn" id="verMarcadores" type="button">Marcadores do modelo PowerPoint</button>
+    </div>
+  </aside>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<dialog class="modal" id="marcadoresDialog">
+  <div class="modal-head">
+    <h3>Marcadores do PowerPoint</h3>
+    <button class="icon-btn" type="button" data-close aria-label="Fechar">×</button>
+  </div>
+  <p class="modal-text" id="modeloStatus"></p>
+  <div class="marcadores" id="marcadoresList"></div>
+</dialog>
+
+<script>window.APP_CONFIG = {{ config|tojson }};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js" defer></script>
+<script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</body>
+</html>

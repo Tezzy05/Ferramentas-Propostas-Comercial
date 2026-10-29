@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ambipar - Autodeclaração de Massas de Logística Reversa</title>
+<style>
+:root{--bg:#f4f7f9;--card:#fff;--text:#17324d;--muted:#6b7b8c;--primary:#087f5b;--primary2:#0b9a70;--border:#dfe7ed;--danger:#c0392b;--shadow:0 10px 30px rgba(25,55,80,.08)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:Arial,sans-serif;color:var(--text)}
+.container{max-width:1050px;margin:35px auto;padding:0 20px}
+.header{background:linear-gradient(135deg,#0b6b50,#0b9a70);color:#fff;border-radius:18px;padding:28px 30px;box-shadow:var(--shadow)}
+.header h1{margin:0 0 8px;font-size:28px}.header p{margin:0;opacity:.9}
+.card{background:var(--card);margin-top:18px;border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:var(--shadow)}
+.step{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);font-weight:bold;margin-bottom:7px}
+h2{margin:0 0 18px;font-size:21px}
+.grid,.materials{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field label{display:block;font-weight:bold;margin-bottom:7px;font-size:14px}
+.field input,.field select{width:100%;padding:12px 13px;border:1px solid #ccd8e0;border-radius:10px;font-size:15px;background:#fff}
+.field select:focus,.material input:focus{outline:2px solid rgba(8,127,91,.18);border-color:var(--primary)}
+.material{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:12px 14px;border:1px solid var(--border);border-radius:11px;background:#fbfcfd}
+.material span{font-weight:600;font-size:14px}.material input{width:135px;text-align:right;padding:10px;border:1px solid #ccd8e0;border-radius:8px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.btn{border:0;border-radius:10px;padding:12px 17px;font-weight:bold;cursor:pointer}.btn:disabled{opacity:.6;cursor:not-allowed}
+.primary{background:var(--primary);color:#fff}.primary:hover{background:var(--primary2)}
+.secondary{background:#eef3f6;color:var(--text)}.danger{background:#fff0ee;color:var(--danger)}
+.summary{display:flex;justify-content:space-between;align-items:center;background:#f0faf6;border:1px solid #cdeee2;padding:14px 16px;border-radius:11px;margin-top:18px}
+.summary strong{font-size:18px}.states{margin-top:14px}.empty{color:var(--muted);padding:10px 0}
+.notice{padding:12px 14px;border-radius:10px;margin-top:12px;display:none}.error{background:#fff0ee;color:#a93226}.ok{background:#eefaf5;color:#087f5b}
+.progress{height:9px;background:#e5ebef;border-radius:10px;overflow:hidden;margin-top:10px}.bar{height:100%;background:var(--primary);width:0%;transition:.25s}
+.year-section{margin-top:18px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:#fff}
+.year-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f0faf6;border-bottom:1px solid #cdeee2}
+.year-title{font-size:17px;font-weight:800;color:var(--primary)}.year-total{font-size:13px;color:var(--muted);font-weight:600}
+.year-states{padding:12px}.state-row{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px}
+.state-info{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.badge,.state-year{background:#e5f7f0;color:var(--primary);border-radius:7px;padding:4px 8px;font-size:11px;font-weight:bold}
+.footer{text-align:center;color:var(--muted);font-size:12px;padding:22px}.loading{display:none;margin-left:8px}
+@media(max-width:700px){.grid,.materials{grid-template-columns:1fr}.container{margin-top:15px}.header{padding:22px}.card{padding:18px}.material input{width:115px}.state-row{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+<h1>Ambipar - Autodeclaração de Massas de Logística Reversa à Compensar</h1>
+<p>Preencha os dados por estado. Ao finalizar, o arquivo Excel será gerado no padrão de importação.</p>
+</div>
+
+<div class="card">
+<div class="step">Etapa 1</div>
+<h2>Ano de compensação</h2>
+<div class="field" style="max-width:320px">
+<label for="year">Ano</label>
+<select id="year">
+<option value="">Selecione</option>
+{% for ano in anos %}<option value="{{ ano }}">{{ ano }}</option>{% endfor %}
+</select>
+</div>
+</div>
+
+<div class="card">
+<div class="step">Etapa 2</div>
+<h2>Informar estado</h2>
+<div class="grid">
+<div class="field">
+<label for="state">Estado</label>
+<select id="state">
+<option value="">Selecione</option>
+{% for uf in estados %}<option value="{{ uf }}">{{ uf }}</option>{% endfor %}
+</select>
+</div>
+</div>
+
+<div style="margin-top:20px">
+<label style="font-weight:bold;font-size:14px;display:block;margin-bottom:10px">Peso gerado (Ton.)</label>
+<div class="materials" id="materials"></div>
+</div>
+
+<div class="summary"><span>Total do estado</span><strong id="total">0,00 t</strong></div>
+
+<div class="actions">
+<button class="btn primary" id="add" type="button">＋ Adicionar estado</button>
+<button class="btn secondary" id="clear" type="button">Limpar campos</button>
+</div>
+
+<div class="notice error" id="formError"></div>
+</div>
+
+<div class="card">
+<div class="step">Etapa 3</div>
+<h2>Estados preenchidos</h2>
+<div><strong id="count">0 estados preenchidos</strong></div>
+<div class="progress"><div class="bar" id="bar"></div></div>
+<div class="states" id="states"></div>
+</div>
+
+<div class="card">
+<div class="step">Etapa 4</div>
+<h2>Finalizar</h2>
+<p style="color:var(--muted)">Revise se as informações preenchidas estão corretas e gere o relatório.</p>
+<div class="actions">
+<button class="btn primary" id="export" type="button">⬇ Gerar Relatório <span class="loading" id="loading">⏳</span></button>
+</div>
+<div class="notice ok" id="success"></div>
+</div>
+
+<div class="footer">
+AMBIPAR ENVIRONMENT RESIDENTIAL COLLECTION S.A - 10.652.751/0001-46<br>
+Autodeclaração de Massas de Logística Reversa à Compensar
+</div>
+</div>
+
+<script>
+const MATERIAIS={{ materiais|tojson }};
+const data={};
+let editingState=null;
+
+const year=document.getElementById("year");
+const state=document.getElementById("state");
+const materials=document.getElementById("materials");
+const total=document.getElementById("total");
+const states=document.getElementById("states");
+const count=document.getElementById("count");
+const bar=document.getElementById("bar");
+const add=document.getElementById("add");
+const clear=document.getElementById("clear");
+const exportBtn=document.getElementById("export");
+const loading=document.getElementById("loading");
+const success=document.getElementById("success");
+const formError=document.getElementById("formError");
+
+MATERIAIS.forEach((material,index)=>{
+    const div=document.createElement("div");
+    div.className="material";
+    div.innerHTML=`<span>${material}</span><input type="text" inputmode="decimal" data-index="${index}" placeholder="0,00" value="0">`;
+    materials.appendChild(div);
+});
+
+function num(value){
+    if(value===null||value===undefined||value==="")return 0;
+    let text=String(value).trim();
+    if(text.includes(",")&&text.includes("."))text=text.replace(/\./g,"").replace(",",".");
+    else if(text.includes(","))text=text.replace(",",".");
+    const number=Number(text);
+    return Number.isFinite(number)?number:NaN;
+}
+
+function fmt(value){
+    return value.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function values(){
+    return [...materials.querySelectorAll("input")].map(input=>num(input.value));
+}
+
+function showError(message){
+    formError.textContent=message;
+    formError.style.display="block";
+    setTimeout(()=>formError.style.display="none",5000);
+}
+
+function clearFields(){
+    materials.querySelectorAll("input").forEach(input=>input.value="0");
+    state.value="";
+    editingState=null;
+    add.textContent="＋ Adicionar estado";
+    updateTotal();
+}
+
+function updateTotal(){
+    const vals=values();
+    const totalValue=vals.every(v=>Number.isFinite(v))?vals.reduce((a,b)=>a+b,0):0;
+    total.textContent=fmt(totalValue)+" t";
+}
+
+function render(){
+    states.innerHTML="";
+    const years=Object.keys(data).filter(y=>data[y]&&Object.keys(data[y]).length).sort((a,b)=>Number(b)-Number(a));
+    const totalStates=years.reduce((n,y)=>n+Object.keys(data[y]).length,0);
+
+    count.textContent=`${totalStates} estado${totalStates===1?"":"s"} preenchido${totalStates===1?"":"s"} em ${years.length} ano${years.length===1?"":"s"}`;
+
+    const current=data[year.value]?Object.keys(data[year.value]).length:0;
+    bar.style.width=Math.min(current/27*100,100)+"%";
+
+    if(!years.length){
+        states.innerHTML='<div class="empty">Nenhum estado informado ainda.</div>';
+        return;
+    }
+
+    years.forEach(y=>{
+        const section=document.createElement("div");
+        section.className="year-section";
+        const list=data[y];
+        const keys=Object.keys(list);
+        const yearTotal=keys.reduce((sum,uf)=>sum+list[uf].reduce((a,b)=>a+b,0),0);
+
+        section.innerHTML=`
+        <div class="year-header">
+            <span class="year-title">Ano de compensação: ${y}</span>
+            <span class="year-total">${keys.length} estado${keys.length===1?"":"s"} • ${fmt(yearTotal)} t</span>
+        </div>`;
+
+        const content=document.createElement("div");
+        content.className="year-states";
+
+        keys.forEach(uf=>{
+            const vals=list[uf];
+            const stateTotal=vals.reduce((a,b)=>a+b,0);
+            const row=document.createElement("div");
+            row.className="state-row";
+
+            row.innerHTML=`
+            <div class="state-info">
+                <span class="badge">✓</span>
+                <strong>${uf}</strong>
+                <span class="state-year">${y}</span>
+                <span style="color:#6b7b8c">${fmt(stateTotal)} t</span>
+            </div>
+            <div class="actions" style="margin:0">
+                <button class="btn secondary" data-edit="${uf}" data-year="${y}" type="button">Editar</button>
+                <button class="btn danger" data-delete="${uf}" data-year="${y}" type="button">Remover</button>
+            </div>`;
+            content.appendChild(row);
+        });
+
+        section.appendChild(content);
+        states.appendChild(section);
+    });
+
+    states.querySelectorAll("[data-edit]").forEach(button=>{
+        button.onclick=()=>{
+            year.value=button.dataset.year;
+            loadState(button.dataset.edit);
+            render();
+        };
+    });
+
+    states.querySelectorAll("[data-delete]").forEach(button=>{
+        button.onclick=()=>{
+            const uf=button.dataset.delete;
+            const selectedYear=button.dataset.year;
+
+            if(!confirm(`Remover ${uf} do ano ${selectedYear}?`))return;
+
+            delete data[selectedYear][uf];
+            if(Object.keys(data[selectedYear]).length===0)delete data[selectedYear];
+            render();
+        };
+    });
+}
+
+function loadState(uf){
+    editingState=uf;
+    state.value=uf;
+
+    const vals=data[year.value][uf];
+
+    materials.querySelectorAll("input").forEach((input,index)=>{
+        input.value=String(vals[index]).replace(".",",");
+    });
+
+    add.textContent="✓ Atualizar estado";
+    updateTotal();
+
+    window.scrollTo({top:300,behavior:"smooth"});
+}
+
+year.onchange=()=>{
+    clearFields();
+    render();
+};
+
+materials.oninput=updateTotal;
+clear.onclick=clearFields;
+
+add.onclick=()=>{
+    const selectedYear=year.value;
+    const selectedState=state.value;
+    const vals=values();
+
+    if(!selectedYear){showError("Selecione o ano de compensação.");return;}
+    if(!selectedState){showError("Selecione um estado.");return;}
+    if(vals.some(v=>!Number.isFinite(v))){showError("Existe pelo menos um valor inválido.");return;}
+    if(vals.some(v=>v<0)){showError("Não são permitidos valores negativos.");return;}
+    if(vals.every(v=>v===0)){showError("Informe pelo menos um material com valor maior que zero.");return;}
+
+    if(!data[selectedYear])data[selectedYear]={};
+
+    if(!editingState&&data[selectedYear][selectedState]){
+        showError(`O estado ${selectedState} já foi informado em ${selectedYear}. Use Editar para alterar os valores.`);
+        return;
+    }
+
+    if(editingState&&editingState!==selectedState)delete data[selectedYear][editingState];
+
+    data[selectedYear][selectedState]=vals;
+    clearFields();
+    render();
+};
+
+exportBtn.onclick=async()=>{
+    const years=Object.keys(data);
+
+    if(!years.length){
+        showError("Adicione pelo menos um estado antes de gerar o Excel.");
+        return;
+    }
+
+    exportBtn.disabled=true;
+    loading.style.display="inline";
+    success.style.display="none";
+
+    try{
+        const response=await fetch("/gerar-excel",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({anos:data})
+        });
+
+        if(!response.ok){
+            let message="Não foi possível gerar o Excel.";
+            try{
+                const errorData=await response.json();
+                if(errorData.erro)message=errorData.erro;
+            }catch(_){}
+            throw new Error(message);
+        }
+
+        const blob=await response.blob();
+        const url=window.URL.createObjectURL(blob);
+        const link=document.createElement("a");
+
+        link.href=url;
+        link.download="Autodeclaracao_volume_embalagens_preenchida.xlsx";
+
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        window.URL.revokeObjectURL(url);
+
+        success.textContent="Excel gerado com sucesso. O download foi iniciado.";
+        success.style.display="block";
+
+    }catch(error){
+        console.error(error);
+        showError(error.message||"Não foi possível gerar o Excel.");
+    }finally{
+        exportBtn.disabled=false;
+        loading.style.display="none";
+    }
+};
+
+render();
+updateTotal();
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "_comentario": "Metodologia CONFAZ: participação (%) de cada UF usada para distribuir a massa nacional entre os estados. Cadastre uma tabela por ano-base em 'anos' (ex.: \"2025\": {\"AC\": 0.25, ..., \"TO\": 0.55}); os 27 valores devem somar 100. 'padrao' (mesmo formato) é usado para anos sem tabela própria. Sem tabela, a compensação nacional aplica o percentual mínimo geral sobre o total e a planilha por UF não pode ser gerada.",
+  "fonte": "",
+  "padrao": null,
+  "anos": {}
+}

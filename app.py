@@ -7,10 +7,14 @@ import webbrowser
 
 from flask import Flask, jsonify, render_template, request, send_file
 
-from servicos.calculos import ESTADOS, MATERIAIS, calcular, gerar_numero, slug, validar_proposta, validar_volumes
-from servicos.planilha import MODEL_PATH, generate_excel, get_available_years, get_metas, import_excel
+from servicos.calculos import (
+    ESTADOS, MATERIAIS, calcular, gerar_numero, slug, validar_declaracao, validar_proposta,
+    volumes_para_planilha,
+)
+from servicos.planilha import MODEL_PATH, generate_excel, import_excel
 from servicos.proposta_pdf import gerar_pdf
 from servicos.proposta_ppt import PPT_MODEL_PATH, gerar_ppt, listar_marcadores, montar_valores
+from servicos.regras import contexto
 
 app = Flask(__name__)
 
@@ -35,8 +39,9 @@ def proposta_do_request():
     if payload is None:
         raise ValueError("Nenhum dado foi recebido.")
     parametros = load_parametros()
-    proposta = validar_proposta(payload, get_available_years(), get_metas(), parametros)
-    return proposta, calcular(proposta), parametros
+    ctx = contexto()
+    proposta = validar_proposta(payload, ctx, parametros)
+    return proposta, calcular(proposta, ctx), parametros, ctx
 
 
 def nome_arquivo(prefixo, proposta, extensao):
@@ -48,13 +53,15 @@ def nome_arquivo(prefixo, proposta, extensao):
 def index():
     try:
         parametros = load_parametros()
-        anos = get_available_years()
-        metas = get_metas()
+        ctx = contexto()
         return render_template(
             "index.html",
             config={
-                "anos": anos,
-                "metas": {str(a): round(metas.get(a, 0) * 100, 4) for a in anos},
+                "anos": ctx["anos"],
+                "anos_planilha": ctx["anos_planilha"],
+                "anos_nacional": ctx["anos_nacional"],
+                "regras": {str(a): r for a, r in ctx["regras"].items()},
+                "confaz": {str(a): t for a, t in ctx["confaz"].items()},
                 "materiais": MATERIAIS,
                 "estados": ESTADOS,
                 "precos": [parametros["precos_por_tonelada"].get(m, 0) for m in MATERIAIS],
@@ -62,7 +69,7 @@ def index():
                 "numero_sugerido": gerar_numero(parametros),
                 "hoje": date.today().isoformat(),
                 "modelo_ppt": PPT_MODEL_PATH.exists(),
-                "marcadores": listar_marcadores(anos),
+                "marcadores": listar_marcadores(ctx["anos"]),
             },
             empresa=parametros["empresa"],
         )
@@ -75,7 +82,8 @@ def index():
 def gerar_excel_route():
     try:
         payload = request.get_json(silent=True) or {}
-        volumes = validar_volumes(payload.get("anos"), get_available_years())
+        ctx = contexto()
+        volumes = volumes_para_planilha(validar_declaracao(payload, ctx), ctx)
         return send_file(generate_excel(volumes), as_attachment=True,
                          download_name=EXCEL_FILENAME, mimetype=MIME_XLSX)
     except (ValueError, FileNotFoundError) as exc:
@@ -102,8 +110,8 @@ def importar_excel_route():
 @app.route("/atualizar-proposta", methods=["POST"])
 def atualizar_proposta_route():
     try:
-        proposta, calc, parametros = proposta_do_request()
-        valores = montar_valores(proposta, calc, parametros, get_available_years())
+        proposta, calc, parametros, ctx = proposta_do_request()
+        valores = montar_valores(proposta, calc, parametros, ctx)
         arquivo, pendentes = gerar_ppt(valores)
         response = send_file(arquivo, as_attachment=True, mimetype=MIME_PPTX,
                              download_name=nome_arquivo("Proposta_Comercial", proposta, "pptx"))
@@ -120,7 +128,7 @@ def atualizar_proposta_route():
 @app.route("/gerar-pdf", methods=["POST"])
 def gerar_pdf_route():
     try:
-        proposta, calc, parametros = proposta_do_request()
+        proposta, calc, parametros, _ = proposta_do_request()
         return send_file(gerar_pdf(proposta, calc, parametros), as_attachment=True,
                          mimetype="application/pdf",
                          download_name=nome_arquivo("Proposta_Tecnica", proposta, "pdf"))

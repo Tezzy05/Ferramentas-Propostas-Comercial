@@ -12,7 +12,7 @@ from reportlab.platypus import (
     KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 )
 
-from .calculos import fmt_data, fmt_moeda, fmt_num, fmt_pct
+from .calculos import fmt_data, fmt_moeda, fmt_num, fmt_pct, texto_escopo
 
 FOREST = colors.HexColor("#163300")
 LIME = colors.HexColor("#9fe870")
@@ -141,11 +141,25 @@ def _tabela_materiais(materiais, total_decl, total_comp, total_valor):
 
 
 def _tabela_estados(estados):
-    linhas = [[e["uf"], fmt_num(e["declarado"], 3), fmt_num(e["compensar"], 3),
-               fmt_moeda(e["valor"])] for e in estados]
+    linhas = [[e["uf"], fmt_num(e["declarado"], 3), fmt_pct(e["percentual"]),
+               fmt_num(e["compensar"], 3), fmt_moeda(e["valor"])] for e in estados]
     w = CONTENT_W
-    return _tabela(["UF", "Declarado (t)", "A compensar (t)", "Valor"], linhas,
-                   larguras=[w * .16, w * .28, w * .28, w * .28])
+    return _tabela(["UF", "Declarado (t)", "% aplicado", "A compensar (t)", "Valor"], linhas,
+                   larguras=[w * .12, w * .22, w * .16, w * .24, w * .26])
+
+
+def _descricao_ano(ano):
+    regra = ano["regra"]
+    if ano["modo"] == "nacional":
+        modo = "Compensação nacional distribuída entre as UFs pela Metodologia CONFAZ." \
+            if ano["distribuido"] else \
+            "Compensação nacional. Distribuição por UF pela Metodologia CONFAZ pendente; " \
+            "aplicado o percentual geral sobre o total declarado."
+    else:
+        modo = "Compensação por estado, conforme massas declaradas por UF."
+    return (f'{modo} Recuperação contratada: <b>{fmt_pct(ano["recuperacao"])}</b> · '
+            f'mínimo legal do ano-base: {_esc(regra["resumo"])} '
+            f'Percentual efetivo sobre a massa declarada: {fmt_pct(ano["percentual_efetivo"])}.')
 
 
 def _tabela_investimento(calc):
@@ -216,7 +230,7 @@ def gerar_pdf(proposta, calc, parametros):
     story = [
         Paragraph("Compensação de logística reversa de embalagens", ST["titulo"]),
         Paragraph(f'Preparada para <b>{_esc(cliente["razao_social"])}</b> · '
-                  f'anos de compensação {", ".join(str(a) for a in calc["anos"])}',
+                  f'{_esc(texto_escopo(calc))}',
                   ST["subtitulo"]),
         Spacer(1, 12),
         _info_bloco([
@@ -244,16 +258,18 @@ def gerar_pdf(proposta, calc, parametros):
     ]
 
     for ano in calc["por_ano"]:
+        titulo = "Nacional · Metodologia CONFAZ" if ano["modo"] == "nacional" else "Por estados"
         story += [
             KeepTogether([
-                Paragraph(f'Ano de compensação {ano["ano"]} · meta {fmt_pct(ano["meta"])}',
-                          ST["secao"]),
+                Paragraph(f'Ano-base {ano["ano"]} · {titulo}', ST["secao"]),
+                Paragraph(_descricao_ano(ano), ST["texto"]),
+                Spacer(1, 6),
                 _tabela_materiais(ano["materiais"], ano["declarado"], ano["compensar"],
                                   ano["valor"]),
             ]),
-            Spacer(1, 8),
-            _tabela_estados(ano["estados"]),
         ]
+        if ano["estados"]:
+            story += [Spacer(1, 8), _tabela_estados(ano["estados"])]
 
     story += [KeepTogether([
         Paragraph("Investimento", ST["secao"]),
@@ -261,6 +277,10 @@ def gerar_pdf(proposta, calc, parametros):
     ])]
 
     condicoes = [parametros["proposta"]["condicoes"]]
+    for ano in sorted(calc["por_ano"], key=lambda a: a["ano"]):
+        texto = ano["regra"]["texto"]
+        if texto and texto not in condicoes:
+            condicoes.append(texto)
     if dados["observacoes"]:
         condicoes.append(dados["observacoes"])
     story += [Paragraph("Condições e observações", ST["secao"])]

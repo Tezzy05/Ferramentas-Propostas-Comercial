@@ -8,11 +8,12 @@ pelo valor da proposta mantendo a formatação do texto original.
 from io import BytesIO
 from pathlib import Path
 import re
+import zipfile
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
-from .calculos import fmt_data, fmt_moeda, fmt_num, fmt_pct
+from .calculos import fmt_data, fmt_moeda, fmt_num, fmt_pct, juntar, texto_escopo
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PPT_MODEL_PATH = BASE_DIR / "modelo" / "Proposta_Comercial.pptx"
@@ -20,7 +21,7 @@ PPT_MODEL_PATH = BASE_DIR / "modelo" / "Proposta_Comercial.pptx"
 PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 
 # Descrição exibida no painel e no README. Marcadores por ano (META_2025,
-# VOLUME_2025, COMPENSAR_2025, VALOR_2025) são gerados para cada ano do modelo.
+# RECUPERACAO_2025, VOLUME_2025, COMPENSAR_2025, VALOR_2025) são gerados para cada ano.
 DESCRICOES = {
     "CLIENTE": "Razão social do cliente",
     "CNPJ": "CNPJ do cliente",
@@ -34,6 +35,9 @@ DESCRICOES = {
     "VALIDADE_DIAS": "Validade em dias",
     "RESPONSAVEL": "Responsável comercial",
     "EMAIL_RESPONSAVEL": "E-mail do responsável comercial",
+    "ESCOPO": "Ex.: Compensação SP e MS ano base 2019 e 2020 e nacional ano base 2024 e 2025",
+    "TEXTO_METAS": "Texto legal das metas mínimas dos anos da proposta",
+    "RECUPERACAO": "Recuperação contratada por ano (ex.: 2025: 40%; 2024: 32%)",
     "ANOS": "Anos de compensação (ex.: 2025, 2024)",
     "QTD_ANOS": "Quantidade de anos",
     "ESTADOS": "UFs com volume declarado",
@@ -51,8 +55,16 @@ DESCRICOES = {
 }
 
 
-def montar_valores(proposta, calc, parametros, anos_modelo):
+def montar_valores(proposta, calc, parametros, ctx):
     cliente, dados = proposta["cliente"], proposta["proposta"]
+    por_ano = {a["ano"]: a for a in calc["por_ano"]}
+    textos = []
+    for ano in sorted(calc["anos"]):
+        regra = por_ano[ano]["regra"]
+        texto = regra["texto"] or f'Ano-base {ano}: {regra["resumo"]}'
+        if texto not in textos:
+            textos.append(texto)
+
     valores = {
         "CLIENTE": cliente["razao_social"],
         "CNPJ": cliente["cnpj"],
@@ -66,11 +78,15 @@ def montar_valores(proposta, calc, parametros, anos_modelo):
         "VALIDADE_DIAS": str(dados["validade_dias"]),
         "RESPONSAVEL": dados["responsavel"],
         "EMAIL_RESPONSAVEL": dados["email_responsavel"],
-        "ANOS": ", ".join(str(a) for a in calc["anos"]),
+        "ESCOPO": texto_escopo(calc),
+        "TEXTO_METAS": " ".join(textos),
+        "RECUPERACAO": "; ".join(
+            f'{a["ano"]}: {fmt_pct(a["recuperacao"])}' for a in calc["por_ano"]),
+        "ANOS": juntar(sorted(calc["anos"])),
         "QTD_ANOS": str(len(calc["anos"])),
-        "ESTADOS": ", ".join(e["uf"] for e in calc["por_estado"]),
+        "ESTADOS": juntar(e["uf"] for e in calc["por_estado"]),
         "QTD_ESTADOS": str(len(calc["por_estado"])),
-        "MATERIAIS": ", ".join(m["material"].title() for m in calc["por_material"]),
+        "MATERIAIS": juntar(m["material"].title() for m in calc["por_material"]),
         "VOLUME_DECLARADO": f'{fmt_num(calc["declarado"], 3)} t',
         "VOLUME_COMPENSAR": f'{fmt_num(calc["compensar"], 3)} t',
         "SUBTOTAL": fmt_moeda(calc["subtotal"]),
@@ -82,10 +98,10 @@ def montar_valores(proposta, calc, parametros, anos_modelo):
         "CNPJ_EMPRESA": parametros["empresa"]["cnpj"],
     }
 
-    por_ano = {a["ano"]: a for a in calc["por_ano"]}
-    for ano in anos_modelo:
+    for ano in ctx["anos"]:
         info = por_ano.get(ano)
-        valores[f"META_{ano}"] = fmt_pct(info["meta"]) if info else "-"
+        valores[f"META_{ano}"] = ctx["regras"][ano]["resumo"]
+        valores[f"RECUPERACAO_{ano}"] = fmt_pct(info["recuperacao"]) if info else "-"
         valores[f"VOLUME_{ano}"] = f'{fmt_num(info["declarado"], 3)} t' if info else "-"
         valores[f"COMPENSAR_{ano}"] = f'{fmt_num(info["compensar"], 3)} t' if info else "-"
         valores[f"VALOR_{ano}"] = fmt_moeda(info["valor"]) if info else "-"
@@ -98,7 +114,8 @@ def listar_marcadores(anos_modelo):
     if anos_modelo:
         ano = anos_modelo[0]
         lista += [
-            {"marcador": f"{{{{META_{ano}}}}}", "descricao": "Meta do ano (troque o ano conforme a guia)"},
+            {"marcador": f"{{{{META_{ano}}}}}", "descricao": "Regra mínima do ano (troque o ano)"},
+            {"marcador": f"{{{{RECUPERACAO_{ano}}}}}", "descricao": "Recuperação contratada no ano"},
             {"marcador": f"{{{{VOLUME_{ano}}}}}", "descricao": "Massa declarada no ano (t)"},
             {"marcador": f"{{{{COMPENSAR_{ano}}}}}", "descricao": "Massa a compensar no ano (t)"},
             {"marcador": f"{{{{VALOR_{ano}}}}}", "descricao": "Valor do ano (R$)"},
@@ -144,6 +161,14 @@ def _iter_text_frames(shapes):
                     yield cell.text_frame
 
 
+def _formato_strict(path):
+    try:
+        with zipfile.ZipFile(path) as z:
+            return "purl.oclc.org/ooxml" in z.read("_rels/.rels").decode("utf-8", "ignore")
+    except (KeyError, zipfile.BadZipFile):
+        return False
+
+
 def gerar_ppt(valores):
     if not PPT_MODEL_PATH.exists():
         raise FileNotFoundError(
@@ -151,6 +176,12 @@ def gerar_ppt(valores):
             f"{{{{...}}}} em: modelo/{PPT_MODEL_PATH.name}"
         )
 
+    if _formato_strict(PPT_MODEL_PATH):
+        raise ValueError(
+            "O modelo PowerPoint foi salvo no formato \"Apresentação Open XML Strict\", que não "
+            "é suportado. Abra o arquivo no PowerPoint e use Salvar como > \"Apresentação do "
+            "PowerPoint (*.pptx)\"."
+        )
     prs = Presentation(str(PPT_MODEL_PATH))
     pendentes = set()
     for slide in prs.slides:

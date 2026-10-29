@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul
-title Autodeclaracao de Massas - AMBIPAR
+title Propostas Comerciais - AMBIPAR
 cd /d "%~dp0"
 
 echo ============================================================
-echo   AUTODECLARACAO DE MASSAS - AMBIPAR
+echo   PROPOSTAS COMERCIAIS - AMBIPAR
 echo ============================================================
 echo.
 
@@ -20,10 +20,10 @@ if errorlevel 1 (
 )
 
 REM Verifica se as bibliotecas necessarias estao instaladas; instala se faltar
-python -c "import flask, openpyxl" >nul 2>nul
+python -c "import flask, openpyxl, pptx, reportlab" >nul 2>nul
 if errorlevel 1 (
     echo Instalando dependencias necessarias, aguarde...
-    python -m pip install --quiet flask openpyxl
+    python -m pip install --quiet -r requirements.txt
 )
 
 echo Iniciando o sistema, o navegador vai abrir automaticamente...

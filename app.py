@@ -1,4 +1,5 @@
 from datetime import date
+from io import BytesIO
 from pathlib import Path
 import json
 import os
@@ -12,7 +13,7 @@ from servicos.calculos import (
     volumes_para_planilha,
 )
 from servicos.planilha import MODEL_PATH, generate_excel, import_excel
-from servicos.proposta_pdf import gerar_pdf
+from servicos.ppt_pdf import pptx_para_pdf
 from servicos.ppt_tabela import montar_tabela_resumo
 from servicos.proposta_ppt import PPT_MODEL_PATH, gerar_ppt, listar_marcadores, montar_valores
 from servicos.regras import contexto
@@ -125,12 +126,18 @@ def importar_excel_route():
         return erro("Ocorreu um erro inesperado ao ler a planilha.", 500)
 
 
+def gerar_apresentacao():
+    """Monta a proposta comercial (PPT) a partir do que veio do painel."""
+    payload, proposta, calc, parametros, ctx = proposta_do_request()
+    valores = montar_valores(proposta, calc, parametros, ctx)
+    arquivo, pendentes = gerar_ppt(valores, montar_tabela_resumo(proposta, calc))
+    return payload, proposta, calc, arquivo, pendentes
+
+
 @app.route("/atualizar-proposta", methods=["POST"])
 def atualizar_proposta_route():
     try:
-        payload, proposta, calc, parametros, ctx = proposta_do_request()
-        valores = montar_valores(proposta, calc, parametros, ctx)
-        arquivo, pendentes = gerar_ppt(valores, montar_tabela_resumo(proposta, calc))
+        payload, proposta, calc, arquivo, pendentes = gerar_apresentacao()
         response = send_file(arquivo, as_attachment=True, mimetype=MIME_PPTX,
                              download_name=nome_arquivo("Proposta_Comercial", proposta, "pptx"))
         if pendentes:
@@ -146,12 +153,13 @@ def atualizar_proposta_route():
 @app.route("/gerar-pdf", methods=["POST"])
 def gerar_pdf_route():
     try:
-        payload, proposta, calc, parametros, _ = proposta_do_request()
-        response = send_file(gerar_pdf(proposta, calc, parametros), as_attachment=True,
-                             mimetype="application/pdf",
-                             download_name=nome_arquivo("Proposta_Tecnica", proposta, "pdf"))
+        # O PDF é a mesma apresentação do botão "Atualizar proposta", convertida.
+        payload, proposta, calc, arquivo, _ = gerar_apresentacao()
+        pdf = pptx_para_pdf(arquivo.getvalue())
+        response = send_file(BytesIO(pdf), as_attachment=True, mimetype="application/pdf",
+                             download_name=nome_arquivo("Proposta_Comercial", proposta, "pdf"))
         return registrar(response, payload, proposta, calc)
-    except ValueError as exc:
+    except (ValueError, FileNotFoundError, RuntimeError) as exc:
         return erro(str(exc))
     except Exception:
         app.logger.exception("Erro inesperado ao gerar o PDF.")

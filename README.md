@@ -8,7 +8,7 @@ uma vez, gera três arquivos e cada proposta fica guardada no **registro de prop
 |---|---|---|
 | **Gerar planilha** | `Autodeclaracao_volume_embalagens_preenchida.xlsx` | Preenche o modelo oficial (B5:K31 de cada guia) |
 | **Atualizar proposta** | `Proposta_Comercial_<nº>_<cliente>.pptx` | Troca os marcadores `{{...}}` do modelo PowerPoint |
-| **Gerar PDF técnico** | `Proposta_Tecnica_<nº>_<cliente>.pdf` | Volumes, meta, massa a compensar e valores por ano, material e UF |
+| **Gerar PDF da proposta** | `Proposta_Comercial_<nº>_<cliente>.pdf` | A mesma apresentação do "Atualizar proposta", convertida em PDF |
 
 ## Fluxo no painel
 
@@ -156,6 +156,15 @@ Marcadores disponíveis (a lista completa também aparece no painel, em
 
 Se o modelo tiver um marcador desconhecido, ele fica como está e o painel avisa.
 
+## PDF da proposta
+
+O botão **Gerar PDF da proposta** monta a mesma apresentação do "Atualizar proposta" e a
+converte em PDF usando o **Microsoft PowerPoint** instalado no computador (Windows), que
+mantém fontes e efeitos iguais aos do PPT. Sem PowerPoint, usa o **LibreOffice** se estiver
+instalado (pode trocar fontes que não estiverem no computador, como a Neo Sans Std). Sem
+nenhum dos dois, o painel avisa; nesse caso, gere o PPT e use "Salvar como PDF" no PowerPoint.
+A conversão leva alguns segundos e a proposta também entra no registro.
+
 ## Registro de propostas
 
 Toda vez que o PDF ou o PPT é gerado (ou em **Salvar no registro**), a proposta é gravada em
@@ -198,7 +207,7 @@ a meta de cada guia (L1) segue a regra do ano (planilha de regras CONFAZ/MMA).
 │   ├── regras.py                # metas por ano/UF e tabela CONFAZ
 │   ├── planilha.py              # gerar/importar a autodeclaração (.xlsx)
 │   ├── proposta_ppt.py          # marcadores do PowerPoint
-│   ├── proposta_pdf.py          # PDF da proposta técnica
+│   ├── ppt_pdf.py               # converte a apresentação em PDF (PowerPoint ou LibreOffice)
 │   ├── registro.py              # registro de propostas (JSON + planilha Excel)
 │   ├── ppt_tabela.py            # tabela de volumes e valores do slide de proposta
 │   └── ooxml_strict.py          # converte PPT "Open XML Strict" para o formato padrão

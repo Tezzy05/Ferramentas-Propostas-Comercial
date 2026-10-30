@@ -7,10 +7,11 @@ Cada ano-base é informado em um de dois modos:
 - "nacional": toneladas totais por material, distribuídas entre as UFs pela
   Metodologia CONFAZ (participação de cada UF, config/confaz.json).
 
-Percentual aplicado à UF = maior entre a recuperação contratada pelo cliente
-e a meta mínima da UF no ano.
+Percentual aplicado à UF = ajuste da UF, se houver; senão o maior entre a
+recuperação nacional contratada e a meta mínima da UF no ano.
 Massa a compensar = massa declarada × percentual aplicado.
-Valor             = massa a compensar × preço por tonelada do material.
+Valor             = massa a compensar × preço por tonelada (UF × categoria do material).
+Ano-base com até 5 t a compensar usa o preço fechado do pacote (tabela do site).
 """
 from datetime import date, datetime, timedelta
 import math
@@ -133,18 +134,32 @@ def validar_declaracao(payload, ctx):
     recuperacao_payload = payload.get("recuperacao") or {}
     recuperacao = {}
     for year in set(volumes) | set(nacional):
-        minimo = ctx["regras"][year]["minimo"]
+        regra = ctx["regras"][year]
         bruto = recuperacao_payload.get(str(year))
-        pct = minimo if bruto in (None, "") else normalize_number(bruto, f"Recuperação {year}")
-        if pct > 100:
-            raise ValueError(f"Recuperação {year}: o percentual não pode passar de 100%.")
-        if pct + 1e-9 < minimo:
-            raise ValueError(
-                f"Recuperação {year}: o mínimo para o ano-base é {fmt_pct(minimo / 100)}."
-            )
-        recuperacao[year] = pct / 100
+        if not isinstance(bruto, dict):
+            bruto = {"nacional": bruto}
+        pct = _pct_recuperacao(bruto.get("nacional"), regra["minimo"], f"Recuperação {year}")
+        ajustes = {}
+        for uf, valor in (bruto.get("estados") or {}).items():
+            uf = str(uf).strip().upper()
+            if uf not in ESTADOS:
+                raise ValueError(f'Recuperação {year}: UF inválida "{uf}".')
+            if valor in (None, ""):
+                continue
+            minimo_uf = regra["excecoes"].get(uf, regra["minimo"])
+            ajustes[uf] = _pct_recuperacao(valor, minimo_uf, f"Recuperação {year}/{uf}")
+        recuperacao[year] = {"nacional": pct, "estados": ajustes}
 
     return {"volumes": volumes, "nacional": nacional, "recuperacao": recuperacao}
+
+
+def _pct_recuperacao(bruto, minimo, rotulo):
+    pct = minimo if bruto in (None, "") else normalize_number(bruto, rotulo)
+    if pct > 100:
+        raise ValueError(f"{rotulo}: o percentual não pode passar de 100%.")
+    if pct + 1e-9 < minimo:
+        raise ValueError(f"{rotulo}: o mínimo é {fmt_pct(minimo / 100)}.")
+    return pct / 100
 
 
 def distribuir_nacional(totais, tabela):
@@ -186,8 +201,23 @@ def volumes_para_planilha(declaracao, ctx):
 
 
 def percentual_uf(regra, recuperacao, uf):
-    """Percentual aplicado à UF (fração): o maior entre o contratado e a meta mínima da UF."""
-    return max(recuperacao, regra["excecoes"].get(uf, regra["minimo"]) / 100)
+    """
+    Percentual aplicado à UF (fração): o ajuste feito para a UF ou, sem ajuste,
+    o maior entre a recuperação nacional contratada e a meta mínima da UF.
+    """
+    if uf in recuperacao["estados"]:
+        return recuperacao["estados"][uf]
+    return max(recuperacao["nacional"], regra["excecoes"].get(uf, regra["minimo"]) / 100)
+
+
+def preco_pacote(compensar, pacotes):
+    """Pacote de menor faixa que cobre a massa a compensar, ou None acima da maior faixa."""
+    if compensar <= 0:
+        return None
+    for pacote in pacotes:
+        if compensar <= pacote["ate_t"] + 1e-9:
+            return pacote
+    return None
 
 
 def validar_proposta(payload, ctx, parametros):
@@ -217,10 +247,38 @@ def validar_proposta(payload, ctx, parametros):
     }
 
     comercial_raw = payload.get("comercial") or {}
-    precos_raw = comercial_raw.get("precos") or []
-    if not isinstance(precos_raw, list) or len(precos_raw) != len(MATERIAIS):
-        raise ValueError(f"São esperados {len(MATERIAIS)} preços por tonelada.")
-    precos = [normalize_number(v, f"Preço - {MATERIAIS[i]}") for i, v in enumerate(precos_raw)]
+    precos_cfg = ctx["precos"]
+    categorias = precos_cfg["categorias"]
+
+    tabela = {uf: list(v) for uf, v in precos_cfg["tabela"].items()}
+    editados = []
+    for uf, valores in (comercial_raw.get("precos_uf") or {}).items():
+        uf = str(uf).strip().upper()
+        if uf not in ESTADOS or not isinstance(valores, list) or len(valores) != len(categorias):
+            raise ValueError(f"Tabela de preços: dados inválidos para a UF {uf}.")
+        for i, valor in enumerate(valores):
+            if valor in (None, ""):
+                continue
+            preco = normalize_number(valor, f"Preço {uf}/{categorias[i].title()}")
+            if abs(preco - tabela[uf][i]) > 1e-9:
+                editados.append(f"{uf}/{categorias[i].title()}")
+            tabela[uf][i] = preco
+
+    pacotes = [dict(p) for p in precos_cfg["pacotes"]]
+    pacotes_raw = comercial_raw.get("pacotes") or []
+    if pacotes_raw:
+        if not isinstance(pacotes_raw, list) or len(pacotes_raw) != len(pacotes):
+            raise ValueError(f"São esperados {len(pacotes)} preços de pacote.")
+        for pacote, valor in zip(pacotes, pacotes_raw):
+            if valor not in (None, ""):
+                pacote["preco"] = normalize_number(valor, f'Pacote até {fmt_num(pacote["ate_t"], 0)} t')
+
+    categoria_material = list(precos_cfg["categoria_material"])
+    outro_categoria = _texto(comercial_raw.get("outro_categoria"), 20).upper()
+    if outro_categoria:
+        if outro_categoria not in categorias:
+            raise ValueError(f'Categoria inválida para "Outro material": {outro_categoria}.')
+        categoria_material[-1] = outro_categoria
 
     desconto = normalize_number(comercial_raw.get("desconto_percentual"), "Desconto")
     if desconto > 100:
@@ -235,7 +293,12 @@ def validar_proposta(payload, ctx, parametros):
         "cliente": cliente,
         "proposta": proposta,
         "declaracao": declaracao,
-        "precos": precos,
+        "tabela_precos": tabela,
+        "precos_editados": editados,
+        "pacotes": pacotes,
+        "categorias": categorias,
+        "categoria_material": categoria_material,
+        "vigencia_precos": precos_cfg["vigencia"],
         "desconto": desconto / 100,
         "materiais": nomes,
     }
@@ -247,72 +310,98 @@ def gerar_numero(parametros, hoje=None):
 
 
 def calcular(proposta, ctx):
-    """Monta todos os números usados no PDF e no PPT."""
-    declaracao, precos, nomes = proposta["declaracao"], proposta["precos"], proposta["materiais"]
+    """Monta todos os números usados no PDF, no PPT e no registro de propostas."""
+    declaracao, nomes = proposta["declaracao"], proposta["materiais"]
+    tabela, pacotes = proposta["tabela_precos"], proposta["pacotes"]
+    cat_idx = [proposta["categorias"].index(c) for c in proposta["categoria_material"]]
+    media = [sum(tabela[uf][j] for uf in ESTADOS) / len(ESTADOS) for j in range(len(proposta["categorias"]))]
     anos = sorted(set(declaracao["volumes"]) | set(declaracao["nacional"]), reverse=True)
+    n = len(MATERIAIS)
 
     por_ano = []
-    acumulado = [{"material": nomes[i], "declarado": 0.0, "compensar": 0.0,
-                  "preco": precos[i], "valor": 0.0} for i in range(len(MATERIAIS))]
+    acumulado = [{"material": nomes[i], "categoria": proposta["categoria_material"][i],
+                  "declarado": 0.0, "compensar": 0.0, "valor": 0.0} for i in range(n)]
     estados_total = {}
 
     for year in anos:
         regra = ctx["regras"][year]
-        contratada = declaracao["recuperacao"][year]
+        rec = declaracao["recuperacao"][year]
         estados, distribuido = estados_do_ano(declaracao, ctx, year)
 
-        declarado = [0.0] * len(MATERIAIS)
-        compensar = [0.0] * len(MATERIAIS)
+        declarado, compensar, valor = [0.0] * n, [0.0] * n, [0.0] * n
         linhas_uf = []
         if distribuido:
             for uf in ESTADOS:
                 if uf not in estados:
                     continue
                 vals = estados[uf]
-                pct = percentual_uf(regra, contratada, uf)
+                pct = percentual_uf(regra, rec, uf)
+                linha = {"uf": uf, "percentual": pct, "declarado": 0.0, "compensar": 0.0, "valor": 0.0}
                 for i, v in enumerate(vals):
+                    comp = v * pct
+                    val = comp * tabela[uf][cat_idx[i]]
                     declarado[i] += v
-                    compensar[i] += v * pct
-                linha = {
-                    "uf": uf, "percentual": pct, "declarado": sum(vals),
-                    "compensar": sum(vals) * pct,
-                    "valor": sum(v * pct * precos[i] for i, v in enumerate(vals)),
-                }
+                    compensar[i] += comp
+                    valor[i] += val
+                    linha["declarado"] += v
+                    linha["compensar"] += comp
+                    linha["valor"] += val
                 linhas_uf.append(linha)
-                total_uf = estados_total.setdefault(
-                    uf, {"uf": uf, "declarado": 0.0, "compensar": 0.0, "valor": 0.0})
-                for chave in ("declarado", "compensar", "valor"):
-                    total_uf[chave] += linha[chave]
         else:
-            # Nacional sem tabela CONFAZ: percentual geral sobre o total.
-            pct = max(contratada, regra["minimo"] / 100)
+            # Nacional sem tabela CONFAZ: percentual geral e preço médio nacional da categoria.
+            pct = max(rec["nacional"], regra["minimo"] / 100)
             declarado = list(declaracao["nacional"][year])
             compensar = [v * pct for v in declarado]
+            valor = [c * media[cat_idx[i]] for i, c in enumerate(compensar)]
+
+        total_compensar = sum(compensar)
+        valor_tabela = sum(valor)
+        pacote = preco_pacote(total_compensar, pacotes)
+        if pacote:
+            # Até 5 t: preço fechado do pacote, rateado pela massa a compensar.
+            fator = pacote["preco"] / total_compensar
+            valor = [c * fator for c in compensar]
+            for linha in linhas_uf:
+                linha["valor"] = linha["compensar"] * fator
+
+        for linha in linhas_uf:
+            total_uf = estados_total.setdefault(
+                linha["uf"], {"uf": linha["uf"], "declarado": 0.0, "compensar": 0.0, "valor": 0.0})
+            for chave in ("declarado", "compensar", "valor"):
+                total_uf[chave] += linha[chave]
 
         materiais = []
-        for i in range(len(MATERIAIS)):
-            valor = compensar[i] * precos[i]
-            materiais.append({"material": nomes[i], "declarado": declarado[i],
-                              "compensar": compensar[i], "preco": precos[i], "valor": valor})
+        for i in range(n):
+            materiais.append({
+                "material": nomes[i], "categoria": proposta["categoria_material"][i],
+                "declarado": declarado[i], "compensar": compensar[i], "valor": valor[i],
+                "preco": valor[i] / compensar[i] if compensar[i] else 0.0,
+            })
             acumulado[i]["declarado"] += declarado[i]
             acumulado[i]["compensar"] += compensar[i]
-            acumulado[i]["valor"] += valor
+            acumulado[i]["valor"] += valor[i]
 
         total_declarado = sum(declarado)
-        total_compensar = sum(compensar)
         por_ano.append({
             "ano": year,
             "modo": "nacional" if year in declaracao["nacional"] else "estados",
             "distribuido": distribuido,
+            "confaz_origem": ctx.get("confaz_origem", {}).get(year),
             "regra": regra,
-            "recuperacao": contratada,
+            "recuperacao": rec["nacional"],
+            "ajustes_uf": rec["estados"],
             "percentual_efetivo": total_compensar / total_declarado if total_declarado else 0,
             "materiais": [m for m in materiais if m["declarado"] > 0],
             "estados": linhas_uf,
             "declarado": total_declarado,
             "compensar": total_compensar,
-            "valor": sum(m["valor"] for m in materiais),
+            "valor": sum(valor),
+            "valor_tabela": valor_tabela,
+            "pacote": pacote,
         })
+
+    for m in acumulado:
+        m["preco"] = m["valor"] / m["compensar"] if m["compensar"] else 0.0
 
     subtotal = sum(m["valor"] for m in acumulado)
     desconto_valor = subtotal * proposta["desconto"]
@@ -330,8 +419,7 @@ def calcular(proposta, ctx):
         "desconto_percentual": proposta["desconto"],
         "desconto_valor": desconto_valor,
         "total": subtotal - desconto_valor,
-        "materiais_sem_preco": [m["material"] for m in acumulado
-                                if m["declarado"] > 0 and m["preco"] == 0],
+        "precos_editados": proposta["precos_editados"],
     }
 
 

@@ -136,7 +136,7 @@ def _tabela_materiais(materiais, total_decl, total_comp, total_valor):
                fmt_moeda(m["preco"]), fmt_moeda(m["valor"])] for m in materiais]
     total = ["Total", fmt_num(total_decl, 3), fmt_num(total_comp, 3), "", fmt_moeda(total_valor)]
     w = CONTENT_W
-    return _tabela(["Material", "Declarado (t)", "A compensar (t)", "Preço por t", "Valor"],
+    return _tabela(["Material", "Declarado (t)", "A compensar (t)", "Preço médio/t", "Valor"],
                    linhas, total, [w * .28, w * .17, w * .19, w * .16, w * .20])
 
 
@@ -151,15 +151,31 @@ def _tabela_estados(estados):
 def _descricao_ano(ano):
     regra = ano["regra"]
     if ano["modo"] == "nacional":
-        modo = "Compensação nacional distribuída entre as UFs pela Metodologia CONFAZ." \
-            if ano["distribuido"] else \
-            "Compensação nacional. Distribuição por UF pela Metodologia CONFAZ pendente; " \
-            "aplicado o percentual geral sobre o total declarado."
+        if not ano["distribuido"]:
+            modo = ("Compensação nacional. Distribuição por UF pela Metodologia CONFAZ pendente; "
+                    "aplicado o percentual geral sobre o total declarado.")
+        elif ano["confaz_origem"] and ano["confaz_origem"] != ano["ano"]:
+            modo = ("Compensação nacional distribuída entre as UFs pela Metodologia CONFAZ "
+                    f'(tabela de {ano["confaz_origem"]}, a mais recente validada).')
+        else:
+            modo = "Compensação nacional distribuída entre as UFs pela Metodologia CONFAZ."
     else:
         modo = "Compensação por estado, conforme massas declaradas por UF."
-    return (f'{modo} Recuperação contratada: <b>{fmt_pct(ano["recuperacao"])}</b> · '
-            f'mínimo legal do ano-base: {_esc(regra["resumo"])} '
-            f'Percentual efetivo sobre a massa declarada: {fmt_pct(ano["percentual_efetivo"])}.')
+
+    ajustes = ""
+    if ano["ajustes_uf"]:
+        lista = ", ".join(f"{uf} {fmt_pct(p)}" for uf, p in sorted(ano["ajustes_uf"].items()))
+        ajustes = f" Ajustes por UF: {lista}."
+
+    if ano["pacote"]:
+        preco = (f'Preço: pacote até {fmt_num(ano["pacote"]["ate_t"], 0)} t '
+                 f'({fmt_moeda(ano["pacote"]["preco"])}).')
+    else:
+        preco = "Preço: tabela por UF e material."
+
+    return (f'{modo} Recuperação contratada: <b>{fmt_pct(ano["recuperacao"])}</b>{ajustes} '
+            f'Mínimo legal do ano-base: {_esc(regra["resumo"])} '
+            f'Percentual efetivo sobre a massa declarada: {fmt_pct(ano["percentual_efetivo"])}. {preco}')
 
 
 def _tabela_investimento(calc):
@@ -246,10 +262,6 @@ def gerar_pdf(proposta, calc, parametros):
         _kpis(calc),
     ]
 
-    if calc["materiais_sem_preco"]:
-        story += [Spacer(1, 6), Paragraph(
-            "Atenção: sem preço por tonelada para " +
-            ", ".join(m.title() for m in calc["materiais_sem_preco"]) + ".", ST["aviso"])]
 
     story += [
         Paragraph("Resumo por material", ST["secao"]),
@@ -277,6 +289,8 @@ def gerar_pdf(proposta, calc, parametros):
     ])]
 
     condicoes = [parametros["proposta"]["condicoes"]]
+    if proposta.get("vigencia_precos"):
+        condicoes.append(f'Tabela de preços por tonelada: vigência {proposta["vigencia_precos"]}.')
     for ano in sorted(calc["por_ano"], key=lambda a: a["ano"]):
         texto = ano["regra"]["texto"]
         if texto and texto not in condicoes:

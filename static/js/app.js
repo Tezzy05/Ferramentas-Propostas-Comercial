@@ -9,6 +9,8 @@
   const ANOS_NACIONAL = CFG.anos_nacional.map(String);
   const STORAGE_KEY = "ambipar-propostas-rascunho-v1";
   const PREFIXO = String(CFG.numero_sugerido).split("-")[0];
+  const CAT = CFG.precos.categorias;
+  const PACOTES = CFG.precos.pacotes;
 
   const NOMES_UF = {
     "acre": "AC", "alagoas": "AL", "amazonas": "AM", "amapa": "AP", "bahia": "BA", "ceara": "CE",
@@ -83,14 +85,16 @@
         observacoes: "",
       },
       comercial: {
-        precos: base ? base.comercial.precos.slice() : CFG.precos.map(Number),
+        precos_uf: {},                       // {UF: [papel, plástico, vidro, metal]} só o que foi editado
+        pacotes: PACOTES.map(() => ""),      // preço editado de cada pacote ("" = padrão)
         desconto_percentual: "",
         outro_material_nome: "",
+        outro_categoria: "",
       },
       anos: {},        // modo "estados": {ano: {UF: [10]}}
       nacional: {},    // modo "nacional": {ano: [10]}
       modo: {},        // {ano: "estados" | "nacional"}
-      recuperacao: {}, // {ano: "40"} em %
+      recuperacao: {}, // {ano: {nacional: "40", estados: {SP: "45"}}} em %
       anoAtivo: ANOS[0],
     };
   }
@@ -98,38 +102,59 @@
   const vetor = (vals) => (Array.isArray(vals) && vals.length === NM
     ? vals.map((v) => (Number.isFinite(+v) && +v > 0 ? +v : 0)) : null);
 
-  function carregar() {
+  // Converte o que veio do localStorage ou do registro para o estado do painel.
+  function normalizarEstado(salvo) {
     const padrao = estadoInicial();
+    const s = {
+      ...padrao,
+      cliente: { ...padrao.cliente, ...salvo.cliente },
+      proposta: { ...padrao.proposta, ...salvo.proposta },
+      comercial: { ...padrao.comercial, ...salvo.comercial },
+      anoAtivo: ANOS.includes(salvo.anoAtivo) ? salvo.anoAtivo : padrao.anoAtivo,
+    };
+    delete s.comercial.metas;
+    delete s.comercial.precos;
+    if (!s.comercial.precos_uf || typeof s.comercial.precos_uf !== "object") s.comercial.precos_uf = {};
+    for (const [uf, vals] of Object.entries(s.comercial.precos_uf)) {
+      if (!ESTADOS.includes(uf) || !Array.isArray(vals) || vals.length !== CAT.length) delete s.comercial.precos_uf[uf];
+      else s.comercial.precos_uf[uf] = vals.map((v) => (v === null || v === undefined ? "" : String(v)));
+    }
+    if (!Array.isArray(s.comercial.pacotes) || s.comercial.pacotes.length !== PACOTES.length) s.comercial.pacotes = padrao.comercial.pacotes;
+    s.comercial.pacotes = s.comercial.pacotes.map((v) => (v === null || v === undefined ? "" : String(v)));
+    if (!CAT.includes(s.comercial.outro_categoria)) s.comercial.outro_categoria = "";
+    for (const [y, ufs] of Object.entries(salvo.anos || {})) {
+      if (!ANOS.includes(y)) continue;
+      for (const [uf, vals] of Object.entries(ufs)) {
+        if (ESTADOS.includes(uf) && vetor(vals)) (s.anos[y] ||= {})[uf] = vetor(vals);
+      }
+    }
+    for (const [y, vals] of Object.entries(salvo.nacional || {})) {
+      if (ANOS_NACIONAL.includes(y) && vetor(vals)) { s.nacional[y] = vetor(vals); s.modo[y] = "nacional"; }
+    }
+    for (const [y, m] of Object.entries(salvo.modo || {})) {
+      if (m === "nacional" && ANOS_NACIONAL.includes(y)) s.modo[y] = m;
+    }
+    for (const [y, v] of Object.entries(salvo.recuperacao || {})) {
+      if (!ANOS.includes(y)) continue;
+      const r = v && typeof v === "object" ? v : { nacional: v };
+      const estados = {};
+      Object.entries(r.estados || {}).forEach(([uf, p]) => { if (ESTADOS.includes(uf) && p !== "" && p !== null) estados[uf] = String(p); });
+      s.recuperacao[y] = { nacional: r.nacional === undefined || r.nacional === null ? "" : String(r.nacional), estados };
+    }
+    if (!temDadosEm(s, s.anoAtivo)) s.anoAtivo = ANOS.find((y) => temDadosEm(s, y)) || s.anoAtivo;
+    return s;
+  }
+
+  function temDadosEm(s, y) {
+    return s.modo[y] === "nacional" ? !!s.nacional[y]?.some((v) => v > 0) : Object.keys(s.anos[y] || {}).length > 0;
+  }
+
+  function carregar() {
     try {
       const salvo = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      if (!salvo) return padrao;
-      const s = {
-        ...padrao,
-        cliente: { ...padrao.cliente, ...salvo.cliente },
-        proposta: { ...padrao.proposta, ...salvo.proposta },
-        comercial: { ...padrao.comercial, ...salvo.comercial },
-        anoAtivo: ANOS.includes(salvo.anoAtivo) ? salvo.anoAtivo : padrao.anoAtivo,
-      };
-      delete s.comercial.metas;
-      if (!vetor(s.comercial.precos)) s.comercial.precos = padrao.comercial.precos;
-      for (const [y, ufs] of Object.entries(salvo.anos || {})) {
-        if (!ANOS.includes(y)) continue;
-        for (const [uf, vals] of Object.entries(ufs)) {
-          if (ESTADOS.includes(uf) && vetor(vals)) (s.anos[y] ||= {})[uf] = vetor(vals);
-        }
-      }
-      for (const [y, vals] of Object.entries(salvo.nacional || {})) {
-        if (ANOS_NACIONAL.includes(y) && vetor(vals)) s.nacional[y] = vetor(vals);
-      }
-      for (const [y, m] of Object.entries(salvo.modo || {})) {
-        if (m === "nacional" && ANOS_NACIONAL.includes(y)) s.modo[y] = m;
-      }
-      for (const [y, v] of Object.entries(salvo.recuperacao || {})) {
-        if (ANOS.includes(y)) s.recuperacao[y] = String(v);
-      }
-      return s;
+      return salvo ? normalizarEstado(salvo) : estadoInicial();
     } catch (_) {
-      return padrao;
+      return estadoInicial();
     }
   }
 
@@ -172,20 +197,54 @@
       : titulo(MATERIAIS[i]);
 
   // ---------- cálculo (espelha servicos/calculos.py) ----------
-  const temDados = (y) => (modo(y) === "nacional"
-    ? !!S.nacional[y]?.some((v) => v > 0)
-    : Object.keys(S.anos[y] || {}).length > 0);
-
+  const temDados = (y) => temDadosEm(S, y);
   const anosComVolume = () => ANOS.filter(temDados);
 
-  function recuperacaoValida(y) {
-    const bruto = S.recuperacao[y];
-    if (bruto === undefined || bruto === "") return minimo(y);
+  const recObj = (y) => (S.recuperacao[y] ||= { nacional: "", estados: {} });
+  function pctValido(bruto, min) {
+    if (bruto === undefined || bruto === null || bruto === "") return min;
     const v = num(bruto);
-    return Number.isFinite(v) && v >= minimo(y) - 1e-9 && v <= 100 ? v : null;
+    return Number.isFinite(v) && v >= min - 1e-9 && v <= 100 ? v : null;
   }
+  const recuperacaoValida = (y) => pctValido(S.recuperacao[y]?.nacional, minimo(y));
   const recuperacao = (y) => recuperacaoValida(y) ?? minimo(y);
-  const pctUF = (y, uf, rec = recuperacao(y)) => Math.max(rec, metaUF(y, uf)) / 100;
+  const ajusteUF = (y, uf) => {
+    const bruto = S.recuperacao[y]?.estados?.[uf];
+    if (bruto === undefined || bruto === "") return null;
+    return pctValido(bruto, metaUF(y, uf));
+  };
+  const ajusteInvalido = (y, uf) => {
+    const bruto = S.recuperacao[y]?.estados?.[uf];
+    return bruto !== undefined && bruto !== "" && ajusteUF(y, uf) === null;
+  };
+  const pctUF = (y, uf, rec = recuperacao(y)) => (ajusteUF(y, uf) ?? Math.max(rec, metaUF(y, uf))) / 100;
+
+  // ---------- preços ----------
+  const catMaterial = (i) => (i === NM - 1 && S.comercial.outro_categoria ? S.comercial.outro_categoria : CFG.precos.categoria_material[i]);
+  const precoPadrao = (uf, j) => CFG.precos.tabela[uf][j];
+  function precoEditado(uf, j) {
+    const bruto = S.comercial.precos_uf[uf]?.[j];
+    if (bruto === undefined || bruto === "") return null;
+    const v = num(bruto);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  }
+  const precoUF = (uf, j) => precoEditado(uf, j) ?? precoPadrao(uf, j);
+  const mediaCategoria = (j) => soma(ESTADOS.map((uf) => precoUF(uf, j))) / ESTADOS.length;
+  function pacotes() {
+    return PACOTES.map((p, k) => {
+      const v = num(S.comercial.pacotes[k]);
+      return { ate_t: p.ate_t, preco: S.comercial.pacotes[k] !== "" && Number.isFinite(v) && v >= 0 ? v : p.preco };
+    });
+  }
+  function pacoteDe(compensar) {
+    if (compensar <= 0) return null;
+    return pacotes().find((p) => compensar <= p.ate_t + 1e-9) || null;
+  }
+  const precosEditados = () => Object.entries(S.comercial.precos_uf)
+    .flatMap(([uf, vals]) => vals.map((_, j) => [uf, j])).filter(([uf, j]) => {
+      const v = precoEditado(uf, j);
+      return v !== null && Math.abs(v - precoPadrao(uf, j)) > 1e-9;
+    });
 
   function distribuir(y, totais) {
     const tabela = CFG.confaz[y];
@@ -203,49 +262,68 @@
     const estados = nacional ? distribuir(y, tot) : (S.anos[y] || {});
     const declarado = Array(NM).fill(0);
     const compensar = Array(NM).fill(0);
+    let valor = Array(NM).fill(0);
     const linhas = [];
     if (estados) {
       ESTADOS.forEach((uf) => {
         const vals = estados[uf];
         if (!vals) return;
         const p = pctUF(y, uf, r);
-        vals.forEach((v, i) => { declarado[i] += v; compensar[i] += v * p; });
-        linhas.push({ uf, p, declarado: soma(vals), compensar: soma(vals) * p, vals });
+        const linha = { uf, p, declarado: 0, compensar: 0, valor: 0 };
+        vals.forEach((v, i) => {
+          const c = v * p;
+          const val = c * precoUF(uf, CAT.indexOf(catMaterial(i)));
+          declarado[i] += v; compensar[i] += c; valor[i] += val;
+          linha.declarado += v; linha.compensar += c; linha.valor += val;
+        });
+        linhas.push(linha);
       });
     } else {
       const p = Math.max(r, minimo(y)) / 100;
-      tot.forEach((v, i) => { declarado[i] = v; compensar[i] = v * p; });
+      tot.forEach((v, i) => {
+        declarado[i] = v; compensar[i] = v * p;
+        valor[i] = compensar[i] * mediaCategoria(CAT.indexOf(catMaterial(i)));
+      });
     }
-    return { nacional, distribuido: !!estados, rec: r, declarado, compensar, linhas };
+    const totalCompensar = soma(compensar);
+    const valorTabela = soma(valor);
+    const pacote = pacoteDe(totalCompensar);
+    if (pacote) {
+      const fator = pacote.preco / totalCompensar;
+      valor = compensar.map((c) => c * fator);
+      linhas.forEach((l) => (l.valor = l.compensar * fator));
+    }
+    return { nacional, distribuido: !!estados, rec: r, declarado, compensar, valor, linhas, valorTabela, pacote };
   }
 
   function calcular() {
     const declarado = Array(NM).fill(0);
     const compensar = Array(NM).fill(0);
+    const valor = Array(NM).fill(0);
     const estados = new Set();
-    const precos = S.comercial.precos.map((p) => (Number.isFinite(+p) ? +p : 0));
     const anos = anosComVolume();
-    let semDistribuicao = [];
+    const porAno = {};
+    const semDistribuicao = [];
 
     for (const y of anos) {
       const c = calcAno(y);
+      porAno[y] = c;
       c.declarado.forEach((v, i) => (declarado[i] += v));
       c.compensar.forEach((v, i) => (compensar[i] += v));
+      c.valor.forEach((v, i) => (valor[i] += v));
       c.linhas.forEach((l) => estados.add(l.uf));
       if (!c.distribuido) semDistribuicao.push(y);
     }
-    const valor = compensar.map((v, i) => v * precos[i]);
     const subtotal = soma(valor);
     const desc = Math.min(Math.max(num(S.comercial.desconto_percentual) || 0, 0), 100) / 100;
     return {
-      anos, declarado, compensar, valor, precos, subtotal, semDistribuicao,
+      anos, porAno, declarado, compensar, valor, subtotal, semDistribuicao,
       estados: [...estados],
       totalDeclarado: soma(declarado),
       totalCompensar: soma(compensar),
       desconto: subtotal * desc,
       descPct: desc,
       total: subtotal * (1 - desc),
-      semPreco: MATERIAIS.map((_, i) => i).filter((i) => compensar[i] > 0 && !precos[i]),
     };
   }
 
@@ -694,7 +772,7 @@
     delete S.anos[y];
     S.modo[y] = "nacional";
     S.nacional[y] = totaisWizard().map((v) => (v > 0 ? v : 0));
-    S.recuperacao[y] = wiz.rec;
+    if (num(wiz.rec) !== recuperacao(y) || recObj(y).nacional === "") mudarNacional(y, wiz.rec);
     S.anoAtivo = y;
     dlg.close();
     atualizarTudo();
@@ -705,80 +783,197 @@
   });
   $("#abrirConfaz").addEventListener("click", () => abrirAssistente(ANOS_NACIONAL.includes(S.anoAtivo) && modo(S.anoAtivo) === "nacional" ? S.anoAtivo : null));
 
-  // ---------- recuperação e preços ----------
-  function montarPrecos() {
-    $("#priceTable").innerHTML = MATERIAIS.map((_, i) => `<div class="price-row" data-price-row="${i}">
-      <div class="name"><span data-price-name="${i}"></span><span class="vol" data-price-vol="${i}"></span></div>
-      <label class="money"><span>R$/t</span><input type="text" inputmode="decimal" data-preco="${i}" aria-label="Preço por tonelada"></label>
-    </div>`).join("");
-    $$("[data-preco]").forEach((inp) => (inp.value = fmt(+S.comercial.precos[inp.dataset.preco] || 0, 2)));
-  }
+  // ---------- recuperação (nacional + por UF) ----------
+  const ufsDoAno = (y) => (modo(y) === "nacional" ? ESTADOS.filter((uf) => (CFG.confaz[y]?.[uf] ?? 1) > 0) : Object.keys(S.anos[y] || {}).sort());
+  const abertos = new Set();
 
   function renderRecuperacao() {
     const anos = anosComVolume();
     const box = $("#recuperacao");
-    const atuais = $$("[data-rec-row]", box).map((el) => el.dataset.recRow).join(",");
-    if (atuais === anos.join(",") && anos.length) {
-      // Só atualiza textos para não perder o foco de quem está digitando.
+    const chave = anos.map((y) => `${y}:${modo(y)}:${ufsDoAno(y).join("")}:${abertos.has(y)}`).join("|");
+    if (box.dataset.chave === chave && anos.length) {
+      // Só atualiza estados visuais para não perder o foco de quem está digitando.
       anos.forEach((y) => {
-        const v = recuperacaoValida(y);
-        $(`[data-rec-row="${y}"] .pct-input`, box).classList.toggle("bad", v === null);
-        $(`[data-rec-row="${y}"] .rec-year span`, box).textContent = modo(y) === "nacional" ? "Nacional · CONFAZ" : "Por estados";
+        const row = $(`[data-rec-row="${y}"]`, box);
+        const nac = $(`[data-rec="${y}"]`, row);
+        if (nac && document.activeElement !== nac && recObj(y).nacional === "") nac.value = fmt(recuperacao(y), 2, 0);
+        $(".rec-ctl .pct-input", row).classList.toggle("bad", recuperacaoValida(y) === null);
+        const n = Object.keys(recObj(y).estados).length;
+        $(".rec-toggle", row).textContent = `${abertos.has(y) ? "Ocultar" : "Ajustar por estado"}${n ? ` (${n} ajustado${n > 1 ? "s" : ""})` : ""}`;
+        $$("[data-rec-uf]", row).forEach((inp) => {
+          const uf = inp.dataset.recUf;
+          const editado = (recObj(y).estados[uf] ?? "") !== "";
+          inp.closest(".rec-uf").classList.toggle("edited", editado);
+          inp.closest(".pct-input").classList.toggle("bad", ajusteInvalido(y, uf));
+          if (!editado && document.activeElement !== inp) inp.value = fmt(pctUF(y, uf) * 100, 2, 0);
+        });
       });
       return;
     }
+    box.dataset.chave = chave;
     if (!anos.length) {
       box.innerHTML = '<p class="empty-note">Informe volumes em algum ano-base para definir a recuperação.</p>';
       return;
     }
-    box.innerHTML = anos.map((y) => `<div class="rec-row" data-rec-row="${y}">
-      <div class="rec-year"><b>${y}</b><span>${modo(y) === "nacional" ? "Nacional · CONFAZ" : "Por estados"}</span></div>
-      <div class="rec-rule">Mínimo: ${textoRegra(y)}</div>
-      <div class="rec-ctl">
-        <input type="range" min="${minimo(y)}" max="100" step="0.1" value="${recuperacao(y)}" data-rec-range="${y}" aria-label="Recuperação ${y}">
-        <label class="pct-input"><input type="text" inputmode="decimal" data-rec="${y}" value="${fmt(recuperacao(y), 2, 0)}" aria-label="Recuperação ${y} (%)">%</label>
-      </div></div>`).join("");
+    box.innerHTML = anos.map((y) => {
+      const n = Object.keys(recObj(y).estados).length;
+      const ufs = abertos.has(y) ? `<div class="rec-ufs">${ufsDoAno(y).map((uf) => {
+        const editado = (recObj(y).estados[uf] ?? "") !== "";
+        const valor = editado ? recObj(y).estados[uf] : fmt(pctUF(y, uf) * 100, 2, 0);
+        return `<div class="rec-uf ${editado ? "edited" : ""}"><div><b>${uf}</b><small>mín. ${pct(metaUF(y, uf))}</small></div>
+          <label class="pct-input ${ajusteInvalido(y, uf) ? "bad" : ""}"><input type="text" inputmode="decimal" data-rec-ano="${y}" data-rec-uf="${uf}" value="${valor}" aria-label="Recuperação ${y} ${uf} (%)">%</label></div>`;
+      }).join("")}</div>` : "";
+      return `<div class="rec-row" data-rec-row="${y}">
+        <div class="rec-year"><b>${y}</b><span>${modo(y) === "nacional" ? "Nacional · CONFAZ" : "Por estados"}</span></div>
+        <div class="rec-rule">Mínimo: ${textoRegra(y)}<br><button type="button" class="rec-toggle" data-rec-abrir="${y}">${abertos.has(y) ? "Ocultar" : "Ajustar por estado"}${n ? ` (${n} ajustado${n > 1 ? "s" : ""})` : ""}</button></div>
+        <div class="rec-ctl">
+          <input type="range" min="${minimo(y)}" max="100" step="0.1" value="${recuperacao(y)}" data-rec-range="${y}" aria-label="Recuperação nacional ${y}">
+          <label class="pct-input ${recuperacaoValida(y) === null ? "bad" : ""}"><input type="text" inputmode="decimal" data-rec="${y}" value="${recObj(y).nacional !== "" ? recObj(y).nacional : fmt(recuperacao(y), 2, 0)}" aria-label="Recuperação nacional ${y} (%)">%</label>
+        </div>
+        ${ufs ? `<div class="rec-more">${ufs}</div>` : ""}
+      </div>`;
+    }).join("");
+  }
+
+  // Mudar o nacional faz todos os estados acompanharem (ajustes individuais são refeitos).
+  function mudarNacional(y, valor) {
+    const r = recObj(y);
+    const tinhaAjustes = Object.keys(r.estados).length > 0;
+    r.nacional = valor;
+    r.estados = {};
+    $("#recuperacao").dataset.chave = "";
+    return tinhaAjustes;
   }
 
   $("#recuperacao").addEventListener("input", (e) => {
     const txt = e.target.closest("[data-rec]");
     const rng = e.target.closest("[data-rec-range]");
+    const uf = e.target.closest("[data-rec-uf]");
     if (txt) {
-      S.recuperacao[txt.dataset.rec] = txt.value;
-      const v = recuperacaoValida(txt.dataset.rec);
-      if (v !== null) $(`[data-rec-range="${txt.dataset.rec}"]`).value = v;
+      if (mudarNacional(txt.dataset.rec, txt.value)) toast(`Ajustes por estado de ${txt.dataset.rec} refeitos: todos seguem o nacional.`, "warn");
+      atualizarTudo({ grade: false });
+      const novo = $(`[data-rec="${txt.dataset.rec}"]`);
+      if (novo && novo !== txt) { novo.focus(); novo.setSelectionRange(novo.value.length, novo.value.length); }
+      return;
     }
     if (rng) {
-      S.recuperacao[rng.dataset.recRange] = fmt(+rng.value, 2, 0);
-      $(`[data-rec="${rng.dataset.recRange}"]`).value = S.recuperacao[rng.dataset.recRange];
+      if (mudarNacional(rng.dataset.recRange, fmt(+rng.value, 2, 0))) toast(`Ajustes por estado de ${rng.dataset.recRange} refeitos: todos seguem o nacional.`, "warn");
+      atualizarTudo({ grade: false });
+      $(`[data-rec-range="${rng.dataset.recRange}"]`)?.focus();
+      return;
     }
-    atualizarTudo({ grade: false });
+    if (uf) {
+      const y = uf.dataset.recAno;
+      const automatico = fmt(Math.max(recuperacao(y), metaUF(y, uf.dataset.recUf)), 2, 0);
+      if (uf.value === "" || uf.value === automatico) delete recObj(y).estados[uf.dataset.recUf];
+      else recObj(y).estados[uf.dataset.recUf] = uf.value;
+      atualizarTudo({ grade: false });
+    }
+  });
+  // Ao sair de um campo vazio, volta a mostrar o percentual automático.
+  $("#recuperacao").addEventListener("focusout", (e) => {
+    if (e.target.closest("[data-rec-uf], [data-rec]")) setTimeout(renderRecuperacao, 0);
+  });
+  $("#recuperacao").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-rec-abrir]");
+    if (!btn) return;
+    const y = btn.dataset.recAbrir;
+    abertos.has(y) ? abertos.delete(y) : abertos.add(y);
+    renderRecuperacao();
   });
 
-  $("#priceTable").addEventListener("input", (e) => {
-    const inp = e.target.closest("[data-preco]");
+  // ---------- tabela de preços e pacotes ----------
+  function renderPrecosCard() {
+    const editados = precosEditados();
+    $("#precoVigencia").innerHTML = `Vigência ${CFG.precos.vigencia}${editados.length ? `<span class="badge-edit">${editados.length} preço${editados.length > 1 ? "s" : ""} editado${editados.length > 1 ? "s" : ""}</span>` : ""}`;
+    $("#catMedias").innerHTML = CAT.map((c, j) => {
+      const vals = ESTADOS.map((uf) => precoUF(uf, j));
+      return `<div><span>${titulo(c)}</span><strong>${money(mediaCategoria(j))}</strong><small>média · ${money(Math.min(...vals))} a ${money(Math.max(...vals))}</small></div>`;
+    }).join("");
+    $("#catMapa").innerHTML = MATERIAIS.map((_, i) => `<span>${nomeMaterial(i)} → <b>${titulo(catMaterial(i))}</b></span>`).join("");
+  }
+
+  function montarPacotes() {
+    $("#pacotes").innerHTML = PACOTES.map((p, k) => `<div class="pack ${S.comercial.pacotes[k] !== "" ? "edited" : ""}" data-pack="${k}">
+      <span>Até ${fmt(p.ate_t, 0)} t</span>
+      <label class="money"><span>R$</span><input type="text" inputmode="decimal" data-pacote="${k}" value="${fmt(pacotes()[k].preco, 2)}" aria-label="Pacote até ${p.ate_t} t"></label>
+    </div>`).join("");
+  }
+
+  $("#pacotes").addEventListener("input", (e) => {
+    const inp = e.target.closest("[data-pacote]");
     if (!inp) return;
+    const k = +inp.dataset.pacote;
     const v = num(inp.value);
     const ok = Number.isFinite(v) && v >= 0;
     inp.closest(".money").style.boxShadow = ok ? "" : "inset 0 0 0 1.5px var(--danger)";
-    if (ok) S.comercial.precos[+inp.dataset.preco] = v;
+    S.comercial.pacotes[k] = ok && Math.abs(v - PACOTES[k].preco) > 1e-9 ? inp.value : (ok ? "" : inp.value);
+    inp.closest(".pack").classList.toggle("edited", S.comercial.pacotes[k] !== "");
     atualizarTudo({ grade: false });
   });
-
-  $("#priceTable").addEventListener("focusout", (e) => {
-    const inp = e.target.closest("[data-preco]");
+  $("#pacotes").addEventListener("focusout", (e) => {
+    const inp = e.target.closest("[data-pacote]");
     if (inp && Number.isFinite(num(inp.value))) inp.value = fmt(num(inp.value), 2);
   });
+  $("#restaurarPacotes").addEventListener("click", () => {
+    S.comercial.pacotes = PACOTES.map(() => "");
+    montarPacotes();
+    atualizarTudo({ grade: false });
+    toast("Preços dos pacotes restaurados.", "ok");
+  });
 
-  function renderPrecos(r) {
-    MATERIAIS.forEach((_, i) => {
-      $(`[data-price-name="${i}"]`).textContent = nomeMaterial(i);
-      $(`[data-price-vol="${i}"]`).textContent = r.compensar[i]
-        ? `${ton(r.compensar[i])} a compensar${r.precos[i] ? ` · ${money(r.valor[i])}` : " · sem preço"}`
-        : "sem volume";
-      $(`[data-price-row="${i}"]`).classList.toggle("missing", r.semPreco.includes(i));
-      $(`[data-col-head="${i}"]`, grid.head).textContent = nomeMaterial(i);
-    });
+  function renderValoresAno(r) {
+    if (!r.anos.length) { $("#valoresAno").innerHTML = ""; return; }
+    $("#valoresAno").innerHTML = `<table class="mini-table">
+      <thead><tr><th>Ano-base</th><th>A compensar (t)</th><th>Regra de preço</th><th>Valor</th></tr></thead>
+      <tbody>${r.anos.map((y) => {
+        const c = r.porAno[y];
+        const regraTxt = c.pacote ? `<span class="tag-pack">Pacote até ${fmt(c.pacote.ate_t, 0)} t</span> tabela daria ${money(c.valorTabela)}` : "Tabela por UF e material";
+        return `<tr><td>${y}</td><td>${fmt(soma(c.compensar), 3, 3)}</td><td>${regraTxt}</td><td>${money(soma(c.valor))}</td></tr>`;
+      }).join("")}</tbody>
+      <tfoot><tr><td>Total</td><td>${fmt(r.totalCompensar, 3, 3)}</td><td></td><td>${money(r.subtotal)}</td></tr></tfoot>
+    </table>`;
+  }
+
+  const dlgPrecos = $("#precosDialog");
+  function renderGradePrecos() {
+    $("#precosSub").textContent = `Vigência ${CFG.precos.vigencia}. Os valores editados valem só para esta proposta; a tabela padrão não muda.`;
+    $("#precosGrid").innerHTML = `<thead><tr><th>UF</th>${CAT.map((c) => `<th>${titulo(c)} (R$/t)</th>`).join("")}</tr></thead>
+      <tbody>${ESTADOS.map((uf) => `<tr><td>${uf}</td>${CAT.map((_, j) => {
+        const bruto = S.comercial.precos_uf[uf]?.[j] ?? "";
+        const editado = precoEditado(uf, j) !== null && Math.abs(precoEditado(uf, j) - precoPadrao(uf, j)) > 1e-9;
+        return `<td><input type="text" inputmode="decimal" data-puf="${uf}" data-pcat="${j}" class="${editado ? "edited" : ""}"
+          value="${bruto !== "" ? bruto : fmt(precoPadrao(uf, j), 2)}" title="Padrão: ${money(precoPadrao(uf, j))}" aria-label="${uf} ${titulo(CAT[j])}"></td>`;
+      }).join("")}</tr>`).join("")}</tbody>`;
+  }
+  $("#abrirPrecos").addEventListener("click", () => { renderGradePrecos(); dlgPrecos.showModal(); });
+  $("#precosGrid").addEventListener("input", (e) => {
+    const inp = e.target.closest("[data-puf]");
+    if (!inp) return;
+    const { puf: uf, pcat } = inp.dataset;
+    const j = +pcat;
+    const v = num(inp.value);
+    const ok = Number.isFinite(v) && v >= 0;
+    inp.classList.toggle("bad", !ok);
+    const linha = (S.comercial.precos_uf[uf] ||= CAT.map(() => ""));
+    linha[j] = ok && Math.abs(v - precoPadrao(uf, j)) < 1e-9 ? "" : inp.value;
+    if (linha.every((x) => x === "")) delete S.comercial.precos_uf[uf];
+    inp.classList.toggle("edited", ok && Math.abs(v - precoPadrao(uf, j)) > 1e-9);
+    atualizarTudo({ grade: false });
+  });
+  $("#restaurarPrecos").addEventListener("click", () => {
+    S.comercial.precos_uf = {};
+    renderGradePrecos();
+    atualizarTudo({ grade: false });
+    toast("Tabela de preços padrão restaurada para esta proposta.", "ok");
+  });
+  dlgPrecos.addEventListener("click", (e) => {
+    if (e.target === dlgPrecos || e.target.closest("[data-close]")) dlgPrecos.close();
+  });
+
+  function montarCategorias() {
+    $("#outroCategoria").innerHTML = `<option value="">Padrão (${titulo(CFG.precos.categoria_material[NM - 1])})</option>` +
+      CAT.map((c) => `<option value="${c}">${titulo(c)}</option>`).join("");
   }
 
   // ---------- campos de cliente/proposta ----------
@@ -845,19 +1040,22 @@
     const alertas = [];
     if (!S.cliente.razao_social.trim()) alertas.push("Informe a razão social do cliente (obrigatória para PPT e PDF).");
     if (!r.anos.length) alertas.push("Nenhum volume informado ainda.");
-    if (r.semPreco.length) alertas.push(`Sem preço por tonelada: ${r.semPreco.map(nomeMaterial).join(", ")}.`);
-    const recInvalidas = r.anos.filter((y) => recuperacaoValida(y) === null);
+    const recInvalidas = r.anos.filter((y) => recuperacaoValida(y) === null || ufsDoAno(y).some((uf) => ajusteInvalido(y, uf)));
     if (recInvalidas.length) alertas.push(`Recuperação fora do intervalo (mínimo legal a 100%) em ${recInvalidas.join(", ")}.`);
     if (r.semDistribuicao.length) alertas.push(`Tabela CONFAZ não cadastrada para ${r.semDistribuicao.join(", ")}: sem distribuição por UF e sem planilha desse ano.`);
+    const provisorias = r.anos.filter((y) => modo(y) === "nacional" && CFG.confaz_origem[y] && String(CFG.confaz_origem[y]) !== y);
+    if (provisorias.length) alertas.push(`${provisorias.join(", ")} usa a tabela CONFAZ de ${CFG.confaz_origem[provisorias[0]]} (a do ano ainda não foi validada).`);
     const semGuia = r.anos.filter((y) => !CFG.anos_planilha.map(String).includes(y));
     if (semGuia.length) alertas.push(`A planilha modelo não tem a guia ${semGuia.join(", ")}.`);
+    const editados = precosEditados().length + S.comercial.pacotes.filter((v) => v !== "").length;
+    if (editados) alertas.push(`${editados} preço(s) editado(s) nesta proposta (tabela ou pacotes).`);
     if ($$("#gridBody input.bad").length) alertas.push(`Há células com valor inválido em ${S.anoAtivo}; elas não entram no cálculo.`);
     if (!CFG.modelo_ppt) alertas.push("Modelo PowerPoint ainda não está em modelo/Proposta_Comercial.pptx.");
     $("#alerts").innerHTML = alertas.map((a) => `<li>${a}</li>`).join("");
 
     $('[data-step="cliente"]').classList.toggle("done", !!S.cliente.razao_social.trim());
     $('[data-step="volumes"]').classList.toggle("done", r.anos.length > 0);
-    $('[data-step="precos"]').classList.toggle("done", r.anos.length > 0 && !r.semPreco.length && !recInvalidas.length);
+    $('[data-step="precos"]').classList.toggle("done", r.anos.length > 0 && !recInvalidas.length);
   }
 
   function atualizarTudo({ grade = true } = {}) {
@@ -866,7 +1064,9 @@
     renderAnos();
     renderNacional();
     renderRecuperacao();
-    renderPrecos(r);
+    renderPrecosCard();
+    renderValoresAno(r);
+    MATERIAIS.forEach((_, i) => ($(`[data-col-head="${i}"]`, grid.head).textContent = nomeMaterial(i)));
     renderResumo(r);
     salvar();
   }
@@ -879,15 +1079,24 @@
     anosComVolume().forEach((y) => {
       if (modo(y) === "nacional") nacional[y] = S.nacional[y];
       else anos[y] = S.anos[y];
-      recuperacaoPayload[y] = S.recuperacao[y] ?? "";
+      const r = recObj(y);
+      const estados = {};
+      ufsDoAno(y).forEach((uf) => { if ((r.estados[uf] ?? "") !== "") estados[uf] = r.estados[uf]; });
+      recuperacaoPayload[y] = { nacional: r.nacional, estados };
+    });
+    const precos_uf = {};
+    Object.entries(S.comercial.precos_uf).forEach(([uf, vals]) => {
+      if (vals.some((v) => v !== "")) precos_uf[uf] = vals;
     });
     return {
       cliente: S.cliente,
       proposta: S.proposta,
       comercial: {
-        precos: S.comercial.precos.map((p) => (Number.isFinite(+p) ? +p : 0)),
+        precos_uf,
+        pacotes: S.comercial.pacotes,
         desconto_percentual: S.comercial.desconto_percentual,
         outro_material_nome: S.comercial.outro_material_nome,
+        outro_categoria: S.comercial.outro_categoria,
       },
       anos,
       nacional,
@@ -935,7 +1144,7 @@
       location.hash = "#volumes";
       return false;
     }
-    const invalidas = anosComVolume().filter((y) => recuperacaoValida(y) === null);
+    const invalidas = anosComVolume().filter((y) => recuperacaoValida(y) === null || ufsDoAno(y).some((uf) => ajusteInvalido(y, uf)));
     if (invalidas.length) {
       toast(`Ajuste a recuperação de ${invalidas.join(", ")} (entre o mínimo legal e 100%).`, "error");
       location.hash = "#precos";
@@ -965,26 +1174,163 @@
       const res = await baixar("/atualizar-proposta", payload(), e.currentTarget, "Proposta_Comercial.pptx");
       const pendentes = res.headers.get("X-Marcadores-Pendentes");
       if (pendentes) toast(`Proposta gerada, mas o modelo tem marcadores desconhecidos: ${pendentes}`, "warn");
-      else toast("Proposta comercial atualizada. O download foi iniciado.", "ok");
+      else toast(`Proposta comercial atualizada. O download foi iniciado.${msgRegistro(res)}`, "ok");
     } catch (err) { toast(err.message, "error"); }
   });
 
   $("#btnPdf").addEventListener("click", async (e) => {
     if (!exigir({ cliente: true })) return;
     try {
-      await baixar("/gerar-pdf", payload(), e.currentTarget, "Proposta_Tecnica.pdf");
-      toast("PDF da proposta técnica gerado. O download foi iniciado.", "ok");
+      const res = await baixar("/gerar-pdf", payload(), e.currentTarget, "Proposta_Tecnica.pdf");
+      toast(`PDF da proposta técnica gerado. O download foi iniciado.${msgRegistro(res)}`, "ok");
     } catch (err) { toast(err.message, "error"); }
   });
 
   $("#novaProposta").addEventListener("click", () => {
-    if (!confirm("Começar uma nova proposta? Os dados atuais serão apagados (responsável e preços são mantidos).")) return;
+    if (!confirm("Começar uma nova proposta? O painel será limpo (o responsável é mantido). Propostas já geradas continuam no registro.")) return;
     S = estadoInicial(S);
-    preencherCampos();
-    montarPrecos();
-    atualizarTudo();
+    recarregarTela();
     window.scrollTo({ top: 0, behavior: "smooth" });
     toast("Nova proposta iniciada.", "ok");
+  });
+
+  // ---------- registro de propostas ----------
+  function msgRegistro(res) {
+    const st = res.headers.get("X-Registro");
+    if (st === "ok") return " Proposta salva no registro.";
+    if (st === "aviso") return " Proposta salva no registro (feche a planilha do registro no Excel para atualizá-la).";
+    if (st === "erro") return " Não foi possível salvar no registro.";
+    return "";
+  }
+
+  function recarregarTela() {
+    abertos.clear();
+    $("#recuperacao").dataset.chave = "";
+    preencherCampos();
+    montarPacotes();
+    atualizarTudo();
+  }
+
+  $("#salvarRegistro").addEventListener("click", async () => {
+    if (!exigir({ cliente: true })) return;
+    try {
+      const res = await fetch("/propostas", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.sucesso) throw new Error(j.erro || "Não foi possível salvar.");
+      toast(j.aviso || `Proposta ${j.numero} salva no registro.`, j.aviso ? "warn" : "ok");
+    } catch (err) { toast(err.message, "error"); }
+  });
+
+  const dlgReg = $("#registroDialog");
+  let registros = [];
+  $("#registroStatus").innerHTML += CFG.status.map((st) => `<option value="${st}">${st}</option>`).join("");
+
+  async function carregarRegistro() {
+    try {
+      const res = await fetch("/propostas");
+      registros = (await res.json()).propostas || [];
+    } catch (_) {
+      registros = [];
+      toast("Não foi possível ler o registro de propostas.", "error");
+    }
+    renderRegistro();
+  }
+
+  const valorFinal = (d) => (d.registro.valor_negociado ?? d.resumo.total);
+  const dataBR = (iso) => (iso ? new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR") : "—");
+
+  function renderRegistro() {
+    const busca = normaliza($("#registroBusca").value || "");
+    const status = $("#registroStatus").value;
+    const lista = registros.filter((d) => (!status || d.registro.status === status) &&
+      (!busca || normaliza([d.numero, d.resumo.cliente, d.resumo.cnpj, d.resumo.responsavel].join(" ")).includes(busca)));
+
+    const ganhas = registros.filter((d) => d.registro.status === "Ganha");
+    const abertas = registros.filter((d) => ["Enviada", "Em negociação", "Em elaboração"].includes(d.registro.status));
+    $("#registroKpis").innerHTML = `
+      <div><span>Propostas</span><strong>${registros.length}</strong></div>
+      <div><span>Em aberto</span><strong>${abertas.length} · ${money(soma(abertas.map(valorFinal)))}</strong></div>
+      <div class="win"><span>Ganhas</span><strong>${ganhas.length} · ${money(soma(ganhas.map(valorFinal)))}</strong></div>
+      <div><span>Massa ganha a compensar</span><strong>${ton(soma(ganhas.map((d) => d.resumo.compensar)))}</strong></div>`;
+
+    const cab = `<thead><tr><th>Nº</th><th>Cliente</th><th>Data</th><th>A compensar</th><th>Valor proposta</th>
+      <th>Valor negociado</th><th>Status</th><th>Data da venda</th><th></th></tr></thead>`;
+    if (!lista.length) {
+      $("#registroTabela").innerHTML = `${cab}<tbody><tr><td colspan="9" class="reg-empty">${registros.length
+        ? "Nenhuma proposta com esses filtros." : "Nenhuma proposta registrada ainda. Gere o PDF ou o PPT, ou use “Salvar no registro”."}</td></tr></tbody>`;
+      return;
+    }
+    $("#registroTabela").innerHTML = cab + `<tbody>${lista.map((d) => `<tr data-num="${d.numero}">
+      <td>${d.numero}</td>
+      <td>${d.resumo.cliente}<small>${[d.resumo.cnpj, d.resumo.responsavel].filter(Boolean).join(" · ")} · ${d.resumo.anos.slice().sort().join(", ")}</small></td>
+      <td>${dataBR(d.resumo.data_proposta)}</td>
+      <td>${fmt(d.resumo.compensar, 3, 3)} t</td>
+      <td>${money(d.resumo.total)}</td>
+      <td><input type="text" inputmode="decimal" data-neg value="${d.registro.valor_negociado !== null && d.registro.valor_negociado !== undefined ? fmt(d.registro.valor_negociado, 2) : ""}" placeholder="—" aria-label="Valor negociado"></td>
+      <td><select data-st class="st-${(d.registro.status || "").replace(/\s/g, "")}" aria-label="Status">${CFG.status.map((st) => `<option ${st === d.registro.status ? "selected" : ""}>${st}</option>`).join("")}</select></td>
+      <td><input type="date" data-venda value="${d.registro.data_venda || ""}" aria-label="Data da venda"></td>
+      <td><div class="acoes"><button class="btn btn-ghost btn-sm" type="button" data-abrir>Abrir</button>
+        <button class="btn btn-danger-ghost btn-sm" type="button" data-excluir aria-label="Excluir">×</button></div></td>
+    </tr>`).join("")}</tbody>`;
+  }
+
+  async function patchRegistro(numero, campos) {
+    try {
+      const res = await fetch(`/propostas/${encodeURIComponent(numero)}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(campos),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.sucesso) throw new Error(j.erro || "Não foi possível atualizar.");
+      const d = registros.find((x) => x.numero === numero);
+      if (d) d.registro = j.registro;
+      renderRegistro();
+      toast(j.aviso || "Registro atualizado.", j.aviso ? "warn" : "ok");
+    } catch (err) { toast(err.message, "error"); }
+  }
+
+  $("#abrirRegistro").addEventListener("click", () => { dlgReg.showModal(); carregarRegistro(); });
+  $("#registroBusca").addEventListener("input", renderRegistro);
+  $("#registroStatus").addEventListener("change", renderRegistro);
+  dlgReg.addEventListener("click", async (e) => {
+    if (e.target === dlgReg || e.target.closest("[data-close]")) return dlgReg.close();
+    const tr = e.target.closest("tr[data-num]");
+    if (!tr) return;
+    const numero = tr.dataset.num;
+    if (e.target.closest("[data-abrir]")) {
+      if (anosComVolume().length && !confirm(`Abrir a proposta ${numero}? O que está no painel agora será substituído.`)) return;
+      try {
+        const res = await fetch(`/propostas/${encodeURIComponent(numero)}`);
+        const j = await res.json();
+        if (!res.ok || !j.sucesso) throw new Error(j.erro || "Não foi possível abrir.");
+        S = normalizarEstado(j.proposta.payload);
+        recarregarTela();
+        dlgReg.close();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        toast(`Proposta ${numero} aberta no painel.`, "ok");
+      } catch (err) { toast(err.message, "error"); }
+    }
+    if (e.target.closest("[data-excluir]")) {
+      if (!confirm(`Excluir a proposta ${numero} do registro? Essa ação não pode ser desfeita.`)) return;
+      const res = await fetch(`/propostas/${encodeURIComponent(numero)}`, { method: "DELETE" });
+      const j = await res.json();
+      if (!res.ok || !j.sucesso) return toast(j.erro || "Não foi possível excluir.", "error");
+      registros = registros.filter((x) => x.numero !== numero);
+      renderRegistro();
+      toast(j.aviso || `Proposta ${numero} excluída do registro.`, j.aviso ? "warn" : "ok");
+    }
+  });
+  dlgReg.addEventListener("change", (e) => {
+    const tr = e.target.closest("tr[data-num]");
+    if (!tr) return;
+    if (e.target.matches("[data-st]")) patchRegistro(tr.dataset.num, { status: e.target.value });
+    if (e.target.matches("[data-venda]")) patchRegistro(tr.dataset.num, { data_venda: e.target.value });
+    if (e.target.matches("[data-neg]")) {
+      const v = num(e.target.value);
+      if (e.target.value.trim() !== "" && !(Number.isFinite(v) && v >= 0)) return toast("Valor negociado inválido.", "error");
+      patchRegistro(tr.dataset.num, { valor_negociado: e.target.value.trim() === "" ? "" : v });
+    }
   });
 
   // ---------- marcadores ----------
@@ -1029,9 +1375,8 @@
 
   // ---------- início ----------
   montarGrade();
-  montarPrecos();
-  preencherCampos();
-  atualizarTudo();
+  montarCategorias();
+  recarregarTela();
 
   if (hasAnime()) {
     anime({

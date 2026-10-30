@@ -1,0 +1,208 @@
+{
+  "_comentario": "Preço por tonelada compensada, por UF e categoria de material (Papel, Plástico, Vidro, Metal). Fonte: Base_de_calculo_e_tabela_de_valores_por_tonelada_comercial.xlsx, 'TABELA VALORES P/ TONELADA - NOVA ABRIL/26'. O comercial pode editar os valores em cada proposta sem alterar esta tabela. 'pacotes': preço fechado quando a massa a compensar do ano-base é de até 5 t (tabela do site Selo Circular Pack).",
+  "vigencia": "abril/2026",
+  "categorias": [
+    "PAPEL",
+    "PLÁSTICO",
+    "VIDRO",
+    "METAL"
+  ],
+  "materiais": {
+    "PAPEL/PAPELÃO": "PAPEL",
+    "PLÁSTICO": "PLÁSTICO",
+    "VIDRO": "VIDRO",
+    "AÇO/FERRO": "METAL",
+    "ALUMÍNIO": "METAL",
+    "LONGA VIDA": "PAPEL",
+    "ISOPOR": "PLÁSTICO",
+    "BOPP": "PLÁSTICO",
+    "AEROSSOL": "METAL",
+    "OUTRO MATERIAL": "PLÁSTICO"
+  },
+  "precos": {
+    "AC": [
+      70,
+      120,
+      100,
+      60
+    ],
+    "AL": [
+      60,
+      100,
+      100,
+      60
+    ],
+    "AM": [
+      60,
+      130,
+      180,
+      60
+    ],
+    "AP": [
+      70,
+      120,
+      150,
+      60
+    ],
+    "BA": [
+      60,
+      100,
+      100,
+      60
+    ],
+    "CE": [
+      60,
+      100,
+      90,
+      60
+    ],
+    "DF": [
+      65,
+      120,
+      160,
+      60
+    ],
+    "ES": [
+      70,
+      100,
+      200,
+      60
+    ],
+    "GO": [
+      65,
+      200,
+      250,
+      60
+    ],
+    "MA": [
+      75,
+      150,
+      200,
+      60
+    ],
+    "MG": [
+      70,
+      120,
+      210,
+      60
+    ],
+    "MS": [
+      65,
+      150,
+      600,
+      60
+    ],
+    "MT": [
+      78,
+      100,
+      120,
+      60
+    ],
+    "PA": [
+      70,
+      70,
+      130,
+      60
+    ],
+    "PB": [
+      60,
+      120,
+      200,
+      60
+    ],
+    "PE": [
+      70,
+      110,
+      100,
+      60
+    ],
+    "PI": [
+      60,
+      130,
+      200,
+      60
+    ],
+    "PR": [
+      60,
+      100,
+      60,
+      60
+    ],
+    "RJ": [
+      70,
+      80,
+      85,
+      60
+    ],
+    "RN": [
+      60,
+      80,
+      100,
+      60
+    ],
+    "RO": [
+      70,
+      80,
+      100,
+      60
+    ],
+    "RR": [
+      70,
+      80,
+      100,
+      60
+    ],
+    "RS": [
+      60,
+      100,
+      130,
+      60
+    ],
+    "SC": [
+      80,
+      100,
+      170,
+      60
+    ],
+    "SE": [
+      60,
+      130,
+      180,
+      60
+    ],
+    "SP": [
+      70,
+      100,
+      90,
+      60
+    ],
+    "TO": [
+      60,
+      150,
+      180,
+      60
+    ]
+  },
+  "pacotes": [
+    {
+      "ate_t": 1,
+      "preco": 950
+    },
+    {
+      "ate_t": 2,
+      "preco": 1800
+    },
+    {
+      "ate_t": 3,
+      "preco": 2250
+    },
+    {
+      "ate_t": 4,
+      "preco": 3200
+    },
+    {
+      "ate_t": 5,
+      "preco": 3750
+    }
+  ]
+}

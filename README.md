@@ -113,6 +113,16 @@ automaticamente, sem precisar editar marcadores:
 | válida por 30 (trinta) dias | validade da proposta por extenso |
 | e-mail e telefone do slide "Obrigado" | contato do responsável comercial |
 
+**Tabela do slide "Proposta Comercial"** ("Compensação Nacional – Meta Mínima"): no PPT
+oficial ela é uma planilha do Excel embutida, que o PowerPoint mostra por uma imagem e não se
+atualiza sozinha. Ao gerar, o app troca esse objeto por uma tabela nativa do PowerPoint na mesma
+posição, com o mesmo visual (faixa azul, cabeçalho lima, linhas cinza alternadas, Neo Sans Std):
+material, volume total (declarado), volume mínimo (a compensar), valor por tonelada e total do
+contrato (com o desconto, se houver). Papel/Papelão, Plástico, Metal (aço/ferro + alumínio),
+Vidro e Longa Vida aparecem sempre; Isopor, BOPP, Aerossol e Outros só quando têm volume. Se a
+recuperação contratada passar do mínimo legal, o título vira "Meta Contratada". Em outro modelo,
+uma caixa de texto com `{{TABELA_RESUMO}}` indica onde a tabela entra.
+
 Só o trecho trocado muda (o resto do parágrafo mantém negrito, cor e fonte), todo destaque
 amarelo é removido e textos que crescem (ex.: metas de vários anos) têm a fonte reduzida para
 caber. Também dá para usar marcadores `{{...}}` em qualquer lugar.
@@ -190,6 +200,7 @@ a meta de cada guia (L1) segue a regra do ano (planilha de regras CONFAZ/MMA).
 │   ├── proposta_ppt.py          # marcadores do PowerPoint
 │   ├── proposta_pdf.py          # PDF da proposta técnica
 │   ├── registro.py              # registro de propostas (JSON + planilha Excel)
+│   ├── ppt_tabela.py            # tabela de volumes e valores do slide de proposta
 │   └── ooxml_strict.py          # converte PPT "Open XML Strict" para o formato padrão
 ├── config/
 │   ├── parametros.json          # empresa, validade, condições

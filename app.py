@@ -13,6 +13,7 @@ from servicos.calculos import (
 )
 from servicos.planilha import MODEL_PATH, generate_excel, import_excel
 from servicos.proposta_pdf import gerar_pdf
+from servicos.ppt_tabela import montar_tabela_resumo
 from servicos.proposta_ppt import PPT_MODEL_PATH, gerar_ppt, listar_marcadores, montar_valores
 from servicos.regras import contexto
 from servicos import registro
@@ -129,7 +130,7 @@ def atualizar_proposta_route():
     try:
         payload, proposta, calc, parametros, ctx = proposta_do_request()
         valores = montar_valores(proposta, calc, parametros, ctx)
-        arquivo, pendentes = gerar_ppt(valores)
+        arquivo, pendentes = gerar_ppt(valores, montar_tabela_resumo(proposta, calc))
         response = send_file(arquivo, as_attachment=True, mimetype=MIME_PPTX,
                              download_name=nome_arquivo("Proposta_Comercial", proposta, "pptx"))
         if pendentes:

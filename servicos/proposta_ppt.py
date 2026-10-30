@@ -20,6 +20,7 @@ from pptx.oxml.ns import qn
 
 from .calculos import fmt_data, fmt_moeda, fmt_num, fmt_pct, juntar, texto_escopo
 from .ooxml_strict import converter, eh_strict
+from .ppt_tabela import inserir_tabela
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PPT_MODEL_PATH = BASE_DIR / "modelo" / "Proposta_Comercial.pptx"
@@ -286,7 +287,7 @@ def _iter_text_frames(shapes):
                     yield cell.text_frame
 
 
-def gerar_ppt(valores):
+def gerar_ppt(valores, tabela=None):
     if not PPT_MODEL_PATH.exists():
         raise FileNotFoundError(
             "Modelo da proposta não encontrado. Salve o PowerPoint com os marcadores "
@@ -298,6 +299,8 @@ def gerar_ppt(valores):
         # Modelo salvo como "Open XML Strict": converte em memória para o formato padrão.
         conteudo = converter(conteudo)
     prs = Presentation(BytesIO(conteudo))
+    if tabela:
+        inserir_tabela(prs, tabela)
     pendentes = set()
     for slide in prs.slides:
         contato = _slide_de_contato(slide)

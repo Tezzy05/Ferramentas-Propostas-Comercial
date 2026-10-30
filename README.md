@@ -98,13 +98,11 @@ validada no ano seguinte: anos posteriores à última tabela (hoje **2026**) usa
 
 ## Modelo PowerPoint (proposta comercial)
 
-O botão **Atualizar proposta** abre `modelo/Proposta_Comercial.pptx`, troca os marcadores
-e devolve uma cópia. O arquivo que está no repositório é **provisório**, criado por
-`scripts/criar_modelo_ppt_exemplo.py` só para teste.
+O botão **Atualizar proposta** abre `modelo/Proposta_Comercial.pptx` (a proposta comercial
+oficial, 8 slides), preenche os dados e devolve uma cópia.
 
-**O PPT oficial pode ser colocado do jeito que está** (salvo com o nome acima): os textos de
-exemplo destacados em amarelo são reconhecidos e preenchidos automaticamente, sem precisar
-editar marcadores:
+Os textos de exemplo destacados em amarelo no PPT oficial são reconhecidos e preenchidos
+automaticamente, sem precisar editar marcadores:
 
 | Texto no PPT oficial | Vira |
 |---|---|
@@ -115,11 +113,29 @@ editar marcadores:
 | válida por 30 (trinta) dias | validade da proposta por extenso |
 | e-mail e telefone do slide "Obrigado" | contato do responsável comercial |
 
-O destaque amarelo é removido e textos que crescem (ex.: metas de vários anos) têm a fonte
-reduzida para caber. Também dá para usar marcadores `{{...}}` em qualquer lugar.
+**Tabela do slide "Proposta Comercial"** ("Compensação Nacional – Meta Mínima"): no PPT
+oficial ela é uma planilha do Excel embutida, que o PowerPoint mostra por uma imagem e não se
+atualiza sozinha. Ao gerar, o app troca esse objeto por uma tabela nativa do PowerPoint na mesma
+posição, com o mesmo visual (faixa azul, cabeçalho lima, linhas cinza alternadas, Neo Sans Std):
+material, volume total (declarado), volume mínimo (a compensar), valor por tonelada e total do
+contrato (com o desconto, se houver). Papel/Papelão, Plástico, Metal (aço/ferro + alumínio),
+Vidro e Longa Vida aparecem sempre; Isopor, BOPP, Aerossol e Outros só quando têm volume. Se a
+recuperação contratada passar do mínimo legal, o título vira "Meta Contratada". Em outro modelo,
+uma caixa de texto com `{{TABELA_RESUMO}}` indica onde a tabela entra.
 
-Salve o modelo como **"Apresentação do PowerPoint (*.pptx)"**. O formato
-"Apresentação Open XML Strict" não é suportado (o painel avisa se for o caso).
+Só o trecho trocado muda (o resto do parágrafo mantém negrito, cor e fonte), todo destaque
+amarelo é removido e textos que crescem (ex.: metas de vários anos) têm a fonte reduzida para
+caber. Também dá para usar marcadores `{{...}}` em qualquer lugar.
+
+**Atualizar o modelo:** salve o novo PPT no computador e rode
+
+```cmd
+python scripts\preparar_modelo_ppt.py "C:\caminho\Apresentação.pptx"
+```
+
+O script converte do formato "Open XML Strict" (se for o caso), reduz imagens enormes (o
+modelo atual caiu de 56,7 MB para 14 MB) e grava em `modelo/Proposta_Comercial.pptx`. Se um
+modelo em Strict for colocado direto na pasta, o app também converte na hora de gerar.
 
 Marcadores disponíveis (a lista completa também aparece no painel, em
 "Marcadores do modelo PowerPoint"):
@@ -183,7 +199,9 @@ a meta de cada guia (L1) segue a regra do ano (planilha de regras CONFAZ/MMA).
 │   ├── planilha.py              # gerar/importar a autodeclaração (.xlsx)
 │   ├── proposta_ppt.py          # marcadores do PowerPoint
 │   ├── proposta_pdf.py          # PDF da proposta técnica
-│   └── registro.py              # registro de propostas (JSON + planilha Excel)
+│   ├── registro.py              # registro de propostas (JSON + planilha Excel)
+│   ├── ppt_tabela.py            # tabela de volumes e valores do slide de proposta
+│   └── ooxml_strict.py          # converte PPT "Open XML Strict" para o formato padrão
 ├── config/
 │   ├── parametros.json          # empresa, validade, condições
 │   ├── precos_tonelada.json     # custo por UF × categoria e planos até 5 t
@@ -193,11 +211,11 @@ a meta de cada guia (L1) segue a regra do ano (planilha de regras CONFAZ/MMA).
 ├── dados/                       # criado no uso: registro de propostas (fora do Git)
 ├── modelo/
 │   ├── Declaracao_volume_embalagens.xlsx
-│   └── Proposta_Comercial.pptx  # provisório
+│   └── Proposta_Comercial.pptx  # proposta comercial oficial
 ├── templates/index.html
 ├── static/css/app.css
 ├── static/js/app.js
-├── scripts/criar_modelo_ppt_exemplo.py
+├── scripts/preparar_modelo_ppt.py
 ├── iniciar.bat
 └── requirements.txt
 ```

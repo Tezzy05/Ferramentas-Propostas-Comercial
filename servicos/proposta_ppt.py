@@ -13,13 +13,14 @@ pelos marcadores automaticamente (TEXTOS_PADRAO).
 from io import BytesIO
 from pathlib import Path
 import re
-import zipfile
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 
 from .calculos import fmt_data, fmt_moeda, fmt_num, fmt_pct, juntar, texto_escopo
+from .ooxml_strict import converter, eh_strict
+from .ppt_tabela import inserir_tabela
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PPT_MODEL_PATH = BASE_DIR / "modelo" / "Proposta_Comercial.pptx"
@@ -225,28 +226,52 @@ def _encolher_se_cresceu(paragraph, tamanho_original):
             run.font.size = int(run.font.size * fator)
 
 
+def _trocar_trecho(runs, inicio, fim, marcador):
+    """
+    Troca o texto entre as posições [inicio, fim) do parágrafo pelo marcador,
+    mexendo só nos trechos (runs) atingidos: a formatação do resto fica igual.
+    """
+    pos = 0
+    limites = []
+    for run in runs:
+        limites.append((pos, pos + len(run.text)))
+        pos += len(run.text)
+    i = next(k for k, (a, b) in enumerate(limites) if a <= inicio < b or (a == b == inicio))
+    j = next(k for k, (a, b) in enumerate(limites) if a < fim <= b)
+    cabeca = runs[i].text[:inicio - limites[i][0]]
+    cauda = runs[j].text[fim - limites[j][0]:]
+    if i == j:
+        runs[i].text = cabeca + marcador + cauda
+        return
+    runs[i].text = cabeca + marcador
+    for k in range(i + 1, j):
+        runs[k].text = ""
+    runs[j].text = cauda
+
+
 def _marcar_textos_padrao(paragraph, contato):
     """Troca os textos de exemplo do PPT oficial por marcadores. Devolve True se trocou."""
     runs = paragraph.runs
     if not runs:
         return False
-    full = "".join(run.text for run in runs)
-    novo = full
+    mudou = False
     for regex, marcador, so_contato in TEXTOS_PADRAO:
         if so_contato and not contato:
             continue
-        novo = regex.sub(marcador, novo)
-    if novo != full:
-        runs[0].text = novo
-        for run in runs[1:]:
-            run.text = ""
-        # Tira o destaque amarelo de "preencher aqui" do modelo.
-        rpr = runs[0]._r.find(qn("a:rPr"))
-        if rpr is not None:
-            for destaque in rpr.findall(qn("a:highlight")):
-                rpr.remove(destaque)
-        return True
-    return False
+        for _ in range(10):  # mais de uma ocorrência no mesmo parágrafo
+            texto = "".join(run.text for run in runs)
+            achado = regex.search(texto)
+            if not achado or achado.group(0) == marcador:
+                break
+            _trocar_trecho(runs, achado.start(), achado.end(), marcador)
+            mudou = True
+    return mudou
+
+
+def _tirar_destaques(paragraph):
+    """Tira o destaque amarelo de "preencher aqui" usado no modelo."""
+    for destaque in paragraph._p.findall(f'.//{qn("a:highlight")}'):
+        destaque.getparent().remove(destaque)
 
 
 def _iter_text_frames(shapes):
@@ -262,28 +287,20 @@ def _iter_text_frames(shapes):
                     yield cell.text_frame
 
 
-def _formato_strict(path):
-    try:
-        with zipfile.ZipFile(path) as z:
-            return "purl.oclc.org/ooxml" in z.read("_rels/.rels").decode("utf-8", "ignore")
-    except (KeyError, zipfile.BadZipFile):
-        return False
-
-
-def gerar_ppt(valores):
+def gerar_ppt(valores, tabela=None):
     if not PPT_MODEL_PATH.exists():
         raise FileNotFoundError(
             "Modelo da proposta não encontrado. Salve o PowerPoint com os marcadores "
             f"{{{{...}}}} em: modelo/{PPT_MODEL_PATH.name}"
         )
 
-    if _formato_strict(PPT_MODEL_PATH):
-        raise ValueError(
-            "O modelo PowerPoint foi salvo no formato \"Apresentação Open XML Strict\", que não "
-            "é suportado. Abra o arquivo no PowerPoint e use Salvar como > \"Apresentação do "
-            "PowerPoint (*.pptx)\"."
-        )
-    prs = Presentation(str(PPT_MODEL_PATH))
+    conteudo = PPT_MODEL_PATH.read_bytes()
+    if eh_strict(conteudo):
+        # Modelo salvo como "Open XML Strict": converte em memória para o formato padrão.
+        conteudo = converter(conteudo)
+    prs = Presentation(BytesIO(conteudo))
+    if tabela:
+        inserir_tabela(prs, tabela)
     pendentes = set()
     for slide in prs.slides:
         contato = _slide_de_contato(slide)
@@ -294,6 +311,7 @@ def gerar_ppt(valores):
                 _replace_paragraph(paragraph, valores, pendentes)
                 if marcado:
                     _encolher_se_cresceu(paragraph, tamanho_original)
+                _tirar_destaques(paragraph)
 
     output = BytesIO()
     prs.save(output)

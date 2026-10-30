@@ -182,7 +182,7 @@
         <span class="panel-index">03</span>
         <div>
           <h2>Recuperação e preços</h2>
-          <p>Recuperação nacional vale para todos os estados; ajuste estados individualmente quando preciso (sempre respeitando o mínimo da UF).</p>
+          <p>Recuperação nacional vale para todos os estados; ajuste estados individualmente quando preciso.</p>
         </div>
       </div>
 
@@ -206,7 +206,7 @@
       <div class="pack-card dre-card" id="cardDre">
         <div class="price-card-head">
           <div>
-            <b>Acima de 5 t · DRE <span class="tag-ativo" data-ativo="dre">Em uso</span></b>
+            <b>Cálculo DRE <span class="tag-ativo" data-ativo="dre">Em uso</span></b>
             <span>Preço de venda por tonelada com custos da tabela por UF, impostos, mão de obra e margem.</span>
           </div>
         </div>
@@ -239,25 +239,20 @@
           <button class="btn btn-ghost btn-sm" id="abrirPrecos" type="button">Ver / editar tabela</button>
         </div>
         <div class="cat-avg" id="catMedias"></div>
-        <div class="cat-map" id="catMapa"></div>
       </div>
-
-      <div class="year-values" id="valoresAno"></div>
 
       <div class="fields fields-4 price-extras">
         <label class="field">
-          <span>Desconto (%)</span>
-          <input type="text" inputmode="decimal" data-bind="comercial.desconto_percentual" data-num placeholder="0">
-        </label>
-        <label class="field span-2">
-          <span>Nome para "Outro material"</span>
-          <input type="text" data-bind="comercial.outro_material_nome" placeholder="Ex.: Madeira (usado no PDF e no PPT)">
+          <span>Desconto (R$)</span>
+          <input type="text" inputmode="decimal" id="descontoValor" placeholder="0,00" autocomplete="off">
         </label>
         <label class="field">
-          <span>Categoria do "Outro"</span>
-          <select data-bind="comercial.outro_categoria" id="outroCategoria"></select>
+          <span>Desconto (%)</span>
+          <input type="text" inputmode="decimal" id="descontoPct" placeholder="0" autocomplete="off">
         </label>
       </div>
+
+      <div class="year-values" id="valoresAno"></div>
     </section>
 
     <footer class="foot">

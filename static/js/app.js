@@ -1416,8 +1416,9 @@
   $("#btnPdf").addEventListener("click", async (e) => {
     if (!exigir({ cliente: true })) return;
     try {
-      const res = await baixar("/gerar-pdf", payload(), e.currentTarget, "Proposta_Tecnica.pdf");
-      toast(`PDF da proposta técnica gerado. O download foi iniciado.${msgRegistro(res)}`, "ok");
+      toast("Gerando o PDF da proposta… pode levar alguns segundos.", "");
+      const res = await baixar("/gerar-pdf", payload(), e.currentTarget, "Proposta_Comercial.pdf");
+      toast(`PDF da proposta gerado. O download foi iniciado.${msgRegistro(res)}`, "ok");
     } catch (err) { toast(err.message, "error"); }
   });
 

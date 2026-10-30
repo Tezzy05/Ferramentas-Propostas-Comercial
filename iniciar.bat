@@ -20,7 +20,7 @@ if errorlevel 1 (
 )
 
 REM Verifica se as bibliotecas necessarias estao instaladas; instala se faltar
-python -c "import flask, openpyxl, pptx, reportlab" >nul 2>nul
+python -c "import flask, openpyxl, pptx, win32com" >nul 2>nul
 if errorlevel 1 (
     echo Instalando dependencias necessarias, aguarde...
     python -m pip install --quiet -r requirements.txt

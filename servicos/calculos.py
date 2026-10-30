@@ -287,9 +287,14 @@ def validar_proposta(payload, ctx, parametros):
             raise ValueError(f'Categoria inválida para "Outro material": {outro_categoria}.')
         categoria_material[-1] = outro_categoria
 
-    desconto = normalize_number(comercial_raw.get("desconto_percentual"), "Desconto")
+    # Desconto em % ou em R$: vale o último campo preenchido no painel.
+    desconto_modo = comercial_raw.get("desconto_modo") or "pct"
+    if desconto_modo not in ("pct", "valor"):
+        raise ValueError(f"Modo de desconto inválido: {desconto_modo}.")
+    desconto = normalize_number(comercial_raw.get("desconto_percentual"), "Desconto (%)")
     if desconto > 100:
         raise ValueError("Desconto: o percentual não pode passar de 100%.")
+    desconto_valor = normalize_number(comercial_raw.get("desconto_valor"), "Desconto (R$)")
 
     nomes = list(MATERIAIS)
     outro_nome = _texto(comercial_raw.get("outro_material_nome"), 40)
@@ -311,7 +316,9 @@ def validar_proposta(payload, ctx, parametros):
         "categorias": categorias,
         "categoria_material": categoria_material,
         "vigencia_precos": precos_cfg["vigencia"],
-        "desconto": desconto / 100,
+        "desconto_modo": desconto_modo,
+        "desconto": desconto / 100 if desconto_modo == "pct" else 0.0,
+        "desconto_valor_fixo": desconto_valor if desconto_modo == "valor" else 0.0,
         "materiais": nomes,
     }
 
@@ -393,8 +400,8 @@ def calcular(proposta, ctx):
         regime = "dre"
         if proposta["modo_preco"] == "margem" and proposta["margem"] is not None:
             # Margem informada: recalcula o preço para a margem final (já com desconto).
-            preco_t = preco_para_margem(custos, proposta["classe_mo"], dre_cfg,
-                                        proposta["margem"], proposta["desconto"])
+            preco_t = preco_para_margem(custos, proposta["classe_mo"], dre_cfg, proposta["margem"],
+                                        proposta["desconto"], proposta["desconto_valor_fixo"])
         else:
             preco_t = proposta["preco_t"] if proposta["preco_t"] is not None else dre_cfg["preco_referencia_t"]
         subtotal = total_t * preco_t
@@ -428,7 +435,12 @@ def calcular(proposta, ctx):
     for m in acumulado:
         m["preco"] = fator if m["compensar"] else 0.0
 
-    desconto_valor = subtotal * proposta["desconto"]
+    if proposta["desconto_modo"] == "valor":
+        desconto_valor = min(proposta["desconto_valor_fixo"], subtotal)
+        desconto_pct = desconto_valor / subtotal if subtotal else 0.0
+    else:
+        desconto_pct = proposta["desconto"]
+        desconto_valor = subtotal * desconto_pct
     total = subtotal - desconto_valor
 
     return {
@@ -446,7 +458,7 @@ def calcular(proposta, ctx):
         "preco_efetivo": fator,
         "modo_preco": proposta["modo_preco"],
         "subtotal": subtotal,
-        "desconto_percentual": proposta["desconto"],
+        "desconto_percentual": desconto_pct,
         "desconto_valor": desconto_valor,
         "total": total,
         "dre": dre_resultado(total, custos, proposta["classe_mo"], dre_cfg),

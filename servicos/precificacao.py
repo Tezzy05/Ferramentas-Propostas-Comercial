@@ -69,14 +69,18 @@ def dre_resultado(faturamento, custos, classe, dre):
     }
 
 
-def preco_para_margem(custos, classe, dre, margem, desconto=0.0):
-    """Menor preço por tonelada (em centavos) cuja margem final, já com desconto, atinge a desejada."""
+def preco_para_margem(custos, classe, dre, margem, desconto=0.0, desconto_valor=0.0):
+    """
+    Menor preço por tonelada (em centavos) cuja margem final, já com desconto,
+    atinge a desejada. O desconto pode ser percentual ou em valor (R$).
+    """
     toneladas = custos["toneladas"]
     if toneladas <= 0 or desconto >= 1:
         return 0.0
 
     def margem_em(preco):
-        return dre_resultado(preco * toneladas * (1 - desconto), custos, classe, dre)["margem"]
+        faturamento = max(preco * toneladas * (1 - desconto) - desconto_valor, 0.0)
+        return dre_resultado(faturamento, custos, classe, dre)["margem"]
 
     baixo, alto = 0.0, 1000.0
     while margem_em(alto) < margem and alto < 1e7:

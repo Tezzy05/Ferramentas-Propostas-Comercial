@@ -31,7 +31,8 @@ ano-base → por estados ou nacional → toneladas por material → percentual d
    - **preço**: planos até 5 t ou DRE acima de 5 t (veja abaixo), com a tabela de **custo por
      tonelada por UF e categoria** (fixa, com "Ver / editar tabela" para mudar valores só naquela
      proposta);
-   - desconto, nome e categoria do "Outro material".
+   - desconto em R$ ou em % (preencher um calcula o outro); a tabela final mostra o rateio por
+     ano e o **Total do contrato**.
 
 O resumo à direita recalcula na hora. O rascunho fica salvo no navegador
 (localStorage); **Nova proposta** limpa o painel, mantendo o responsável.
@@ -73,7 +74,7 @@ planilha (`subtrair_ir_adicional`). A DRE é interna: não sai no PDF nem no PPT
 
 Categorias de custo (`config/precos_tonelada.json`): Papel/Papelão e Longa Vida → **Papel**;
 Plástico, Isopor e BOPP → **Plástico**; Vidro → **Vidro**; Aço/Ferro, Alumínio e Aerossol →
-**Metal**; "Outro material" → escolhida no painel (padrão Plástico).
+**Metal**; "Outro material" → **Plástico**.
 
 Metas mínimas (`config/regras_compensacao.json`):
 

@@ -3,6 +3,8 @@ Planilha de autodeclaração.
 
 O arquivo modelo/Declaracao_volume_embalagens.xlsx é tratado como template
 intocável: abrimos o modelo, preenchemos somente B5:K31 e devolvemos uma cópia.
+Ano-base sem guia no modelo (ex.: 2026) ganha, só na cópia, uma guia igual à
+do ano mais recente, com o ano em B1 e a meta do ano em L1.
 """
 from io import BytesIO
 from pathlib import Path
@@ -58,12 +60,29 @@ def get_state_rows(ws):
     return rows
 
 
-def generate_excel(volumes):
+def _criar_guias(wb, anos, metas):
+    guias = _year_sheets(wb)
+    if not guias:
+        raise ValueError("A planilha modelo não tem nenhuma guia de ano para servir de base.")
+    base = max(guias, key=lambda ws: int(ws.title))
+    for ano in anos:
+        if str(ano) in wb.sheetnames:
+            continue
+        ws = wb.copy_worksheet(base)
+        ws.title = str(ano)
+        ws["B1"] = ano
+        if ano in metas:
+            ws[META_CELL] = metas[ano]
+    wb._sheets.sort(key=lambda ws: -int(ws.title) if re.fullmatch(r"\d{4}", ws.title) else 0)
+
+
+def generate_excel(volumes, metas=None):
     """
     Todos os estados ficam com zero em todas as guias; os informados
     sobrescrevem os zeros. Não recria nem formata a planilha.
     """
     wb = load_model()
+    _criar_guias(wb, volumes.keys(), metas or {})
 
     for ws in wb.worksheets:
         state_rows = get_state_rows(ws)

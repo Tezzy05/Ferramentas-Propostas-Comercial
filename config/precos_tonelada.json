@@ -1,5 +1,5 @@
 {
-  "_comentario": "Preço por tonelada compensada, por UF e categoria de material (Papel, Plástico, Vidro, Metal). Fonte: Base_de_calculo_e_tabela_de_valores_por_tonelada_comercial.xlsx, 'TABELA VALORES P/ TONELADA - NOVA ABRIL/26'. O comercial pode editar os valores em cada proposta sem alterar esta tabela. 'pacotes': preço fechado quando a massa a compensar do ano-base é de até 5 t (tabela do site Selo Circular Pack).",
+  "_comentario": "Custo por tonelada compensada, por UF e categoria de material (Papel, Plástico, Vidro, Metal). Fonte: 'TABELA VALORES P/ TONELADA - NOVA ABRIL/26'. É custo: acima de 5 t o preço de venda sai da DRE (config/dre.json). 'planos': preço por tonelada quando a massa a compensar da proposta (soma de todos os anos) é de até 5 t; cobra-se a faixa cheia do plano.",
   "vigencia": "abril/2026",
   "categorias": [
     "PAPEL",
@@ -183,26 +183,27 @@
       60
     ]
   },
-  "pacotes": [
+  "planos": [
     {
       "ate_t": 1,
-      "preco": 950
+      "preco_t": 950
     },
     {
       "ate_t": 2,
-      "preco": 1800
+      "preco_t": 900
     },
     {
       "ate_t": 3,
-      "preco": 2250
+      "preco_t": 800
     },
     {
       "ate_t": 4,
-      "preco": 3200
+      "preco_t": 750
     },
     {
       "ate_t": 5,
-      "preco": 3750
+      "preco_t": 740
     }
-  ]
+  ],
+  "cobrar_faixa_cheia": true
 }

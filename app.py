@@ -78,6 +78,8 @@ def index():
                 "estados": ESTADOS,
                 "confaz_origem": {str(a): o for a, o in ctx["confaz_origem"].items()},
                 "precos": ctx["precos"],
+                "dre": ctx["dre"],
+                "forma_pagamento": parametros["proposta"].get("forma_pagamento", ""),
                 "status": registro.STATUS,
                 "validade_dias": parametros["proposta"]["validade_dias"],
                 "numero_sugerido": gerar_numero(parametros),
@@ -98,7 +100,8 @@ def gerar_excel_route():
         payload = request.get_json(silent=True) or {}
         ctx = contexto()
         volumes = volumes_para_planilha(validar_declaracao(payload, ctx), ctx)
-        return send_file(generate_excel(volumes), as_attachment=True,
+        metas = {ano: ctx["regras"][ano]["minimo"] / 100 for ano in volumes}
+        return send_file(generate_excel(volumes, metas), as_attachment=True,
                          download_name=EXCEL_FILENAME, mimetype=MIME_XLSX)
     except (ValueError, FileNotFoundError) as exc:
         return erro(str(exc))

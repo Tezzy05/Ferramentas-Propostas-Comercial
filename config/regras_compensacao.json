@@ -1,15 +1,7 @@
 {
-  "_comentario": "Percentual mínimo de recuperação por ano-base. 'minimo' vale para todas as UFs, exceto as listadas em 'excecoes'. Anos sem regra usam a célula L1 da planilha modelo. 'anos_nacional' são os anos que aceitam compensação nacional pela Metodologia CONFAZ.",
-  "anos_nacional": [
-    2019,
-    2020,
-    2021,
-    2022,
-    2023,
-    2024,
-    2025,
-    2026
-  ],
+  "_comentario": "Percentual mínimo de recuperação por ano-base. 'minimo' vale para todas as UFs, exceto as listadas em 'excecoes'. Anos sem regra usam a célula L1 da planilha modelo ou, sem guia, 'minimo_padrao'. A planilha Regras_CONFAZ (time técnico) prevalece. 'anos_nacional': 'todos' libera a Metodologia CONFAZ em todos os anos.",
+  "anos_nacional": "todos",
+  "minimo_padrao": 22,
   "anos": {
     "2021": {
       "minimo": 22,

@@ -4,6 +4,11 @@ Atualização da proposta comercial em PowerPoint.
 O modelo (modelo/Proposta_Comercial.pptx) usa marcadores no formato {{NOME}}
 em caixas de texto, formas, tabelas e grupos. Ao gerar, cada marcador é trocado
 pelo valor da proposta mantendo a formatação do texto original.
+
+O PPT oficial pode ser usado do jeito que está: os textos de exemplo destacados
+nele (ex.: "INSERIR RAZÃO SOCIAL", a linha "Compensação ... ano base ...", a
+forma de pagamento e o contato do último slide) são reconhecidos e trocados
+pelos marcadores automaticamente (TEXTOS_PADRAO).
 """
 from io import BytesIO
 from pathlib import Path
@@ -12,6 +17,7 @@ import zipfile
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.oxml.ns import qn
 
 from .calculos import fmt_data, fmt_moeda, fmt_num, fmt_pct, juntar, texto_escopo
 
@@ -33,8 +39,13 @@ DESCRICOES = {
     "DATA_PROPOSTA": "Data da proposta (dd/mm/aaaa)",
     "VALIDADE": "Data de validade (dd/mm/aaaa)",
     "VALIDADE_DIAS": "Validade em dias",
+    "VALIDADE_EXTENSO": "Validade por extenso, ex.: 30 (trinta)",
     "RESPONSAVEL": "Responsável comercial",
     "EMAIL_RESPONSAVEL": "E-mail do responsável comercial",
+    "TELEFONE_RESPONSAVEL": "Telefone do responsável comercial",
+    "FORMA_PAGAMENTO": "Forma de pagamento, ex.: 30 dias após o aceite desta proposta.",
+    "PRECO_TONELADA": "Preço por tonelada compensada (R$)",
+    "PLANO": "Plano até 5 t (ex.: Plano até 3 t) ou cálculo por tonelada",
     "ESCOPO": "Ex.: Compensação SP e MS ano base 2019 e 2020 e nacional ano base 2024 e 2025",
     "TEXTO_METAS": "Texto legal das metas mínimas dos anos da proposta",
     "RECUPERACAO": "Recuperação contratada por ano (ex.: 2025: 40%; 2024: 32%)",
@@ -55,15 +66,45 @@ DESCRICOES = {
 }
 
 
+UNIDADES = ["zero", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez",
+            "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"]
+DEZENAS = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"]
+CENTENAS = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos", "seiscentos",
+            "setecentos", "oitocentos", "novecentos"]
+
+
+def numero_extenso(n):
+    """Inteiros de 0 a 999 por extenso (suficiente para dias de validade)."""
+    if n < 20:
+        return UNIDADES[n]
+    if n < 100:
+        d, u = divmod(n, 10)
+        return DEZENAS[d] + (f" e {UNIDADES[u]}" if u else "")
+    if n == 100:
+        return "cem"
+    if n < 1000:
+        c, resto = divmod(n, 100)
+        return CENTENAS[c] + (f" e {numero_extenso(resto)}" if resto else "")
+    return str(n)
+
+
 def montar_valores(proposta, calc, parametros, ctx):
     cliente, dados = proposta["cliente"], proposta["proposta"]
+    contato = parametros.get("contato_padrao", {"email": "", "telefone": ""})
     por_ano = {a["ano"]: a for a in calc["por_ano"]}
-    textos = []
-    for ano in sorted(calc["anos"]):
-        regra = por_ano[ano]["regra"]
-        texto = regra["texto"] or f'Ano-base {ano}: {regra["resumo"]}'
-        if texto not in textos:
-            textos.append(texto)
+    # Texto legal do ano mais recente + resumo curto dos demais (cabe no slide).
+    recente = max(calc["anos"])
+    regra = por_ano[recente]["regra"]
+    textos = [regra["texto"] or f'Ano-base {recente}: {regra["resumo"]}']
+    demais = []
+    for a in sorted(calc["anos"]):
+        if a == recente:
+            continue
+        r = por_ano[a]["regra"]
+        exc = "".join(f", {uf} {fmt_pct(p / 100)}" for uf, p in r["excecoes"].items())
+        demais.append(f'{a} ({fmt_pct(r["minimo"] / 100)}{exc})')
+    if demais:
+        textos.append(f"Demais anos-base: {juntar(demais)}.")
 
     valores = {
         "CLIENTE": cliente["razao_social"],
@@ -76,8 +117,14 @@ def montar_valores(proposta, calc, parametros, ctx):
         "DATA_PROPOSTA": fmt_data(dados["data"]),
         "VALIDADE": fmt_data(dados["validade"]),
         "VALIDADE_DIAS": str(dados["validade_dias"]),
+        "VALIDADE_EXTENSO": f'{dados["validade_dias"]} ({numero_extenso(dados["validade_dias"])})',
         "RESPONSAVEL": dados["responsavel"],
-        "EMAIL_RESPONSAVEL": dados["email_responsavel"],
+        "EMAIL_RESPONSAVEL": dados["email_responsavel"] or contato["email"],
+        "TELEFONE_RESPONSAVEL": dados["telefone_responsavel"] or contato["telefone"],
+        "FORMA_PAGAMENTO": dados["forma_pagamento"],
+        "PRECO_TONELADA": fmt_moeda(calc["preco_efetivo"]),
+        "PLANO": (f'Plano até {fmt_num(calc["plano"]["ate_t"], 0)} t' if calc["regime"] == "plano"
+                  else f'{fmt_num(calc["compensar"], 3)} t a compensar'),
         "ESCOPO": texto_escopo(calc),
         "TEXTO_METAS": " ".join(textos),
         "RECUPERACAO": "; ".join(
@@ -148,6 +195,60 @@ def _replace_paragraph(paragraph, valores, pendentes):
             run.text = ""
 
 
+# (regex sobre o texto do parágrafo, substituição). Só valem para o slide de contato
+# os itens marcados com True.
+TEXTOS_PADRAO = [
+    (re.compile(r"INSERIR\s+RAZ[ÃA]O\s+SOCIAL", re.I), "{{CLIENTE}}", False),
+    (re.compile(r"^\s*Compensa[çc][ãa]o\b.*\bano\s+base\b.*$", re.I | re.S), "{{ESCOPO}}", False),
+    (re.compile(r"^\s*A meta m[íi]nima para a comprova[çc][ãa]o da log[íi]stica reversa.*$", re.I | re.S),
+     "{{TEXTO_METAS}}", False),
+    (re.compile(r"30\s*dias\s+ap[óo]s\s+o\s+aceite\s+desta\s+proposta\.?", re.I), "{{FORMA_PAGAMENTO}}", False),
+    (re.compile(r"v[áa]lida\s+por\s+30\s*\(trinta\)\s*dias", re.I), "válida por {{VALIDADE_EXTENSO}} dias", False),
+    (re.compile(r"[\w.]+@ambipar\.co\s*m\b", re.I), "{{EMAIL_RESPONSAVEL}}", True),
+    (re.compile(r"\+?55\s*\(?11\)?\s*9?\d{4}-?\d{4}"), "{{TELEFONE_RESPONSAVEL}}", True),
+]
+
+
+def _slide_de_contato(slide):
+    texto = " ".join(tf.text for tf in _iter_text_frames(slide.shapes)).upper()
+    return "OBRIGADO" in texto or "E N T R E" in texto or "ENTRE EM CONTATO" in texto
+
+
+def _encolher_se_cresceu(paragraph, tamanho_original):
+    """Texto longo do modelo que cresceu (ex.: metas de vários anos): reduz a fonte até 70%."""
+    novo = len(paragraph.text)
+    if tamanho_original < 60 or novo <= tamanho_original * 1.08:
+        return
+    fator = max(0.7, tamanho_original / novo)
+    for run in paragraph.runs:
+        if run.font.size:
+            run.font.size = int(run.font.size * fator)
+
+
+def _marcar_textos_padrao(paragraph, contato):
+    """Troca os textos de exemplo do PPT oficial por marcadores. Devolve True se trocou."""
+    runs = paragraph.runs
+    if not runs:
+        return False
+    full = "".join(run.text for run in runs)
+    novo = full
+    for regex, marcador, so_contato in TEXTOS_PADRAO:
+        if so_contato and not contato:
+            continue
+        novo = regex.sub(marcador, novo)
+    if novo != full:
+        runs[0].text = novo
+        for run in runs[1:]:
+            run.text = ""
+        # Tira o destaque amarelo de "preencher aqui" do modelo.
+        rpr = runs[0]._r.find(qn("a:rPr"))
+        if rpr is not None:
+            for destaque in rpr.findall(qn("a:highlight")):
+                rpr.remove(destaque)
+        return True
+    return False
+
+
 def _iter_text_frames(shapes):
     for shape in shapes:
         if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
@@ -185,9 +286,14 @@ def gerar_ppt(valores):
     prs = Presentation(str(PPT_MODEL_PATH))
     pendentes = set()
     for slide in prs.slides:
+        contato = _slide_de_contato(slide)
         for text_frame in _iter_text_frames(slide.shapes):
             for paragraph in text_frame.paragraphs:
+                tamanho_original = len(paragraph.text)
+                marcado = _marcar_textos_padrao(paragraph, contato)
                 _replace_paragraph(paragraph, valores, pendentes)
+                if marcado:
+                    _encolher_se_cresceu(paragraph, tamanho_original)
 
     output = BytesIO()
     prs.save(output)

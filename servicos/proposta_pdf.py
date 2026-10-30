@@ -167,19 +167,19 @@ def _descricao_ano(ano):
         lista = ", ".join(f"{uf} {fmt_pct(p)}" for uf, p in sorted(ano["ajustes_uf"].items()))
         ajustes = f" Ajustes por UF: {lista}."
 
-    if ano["pacote"]:
-        preco = (f'Preço: pacote até {fmt_num(ano["pacote"]["ate_t"], 0)} t '
-                 f'({fmt_moeda(ano["pacote"]["preco"])}).')
-    else:
-        preco = "Preço: tabela por UF e material."
-
     return (f'{modo} Recuperação contratada: <b>{fmt_pct(ano["recuperacao"])}</b>{ajustes} '
             f'Mínimo legal do ano-base: {_esc(regra["resumo"])} '
-            f'Percentual efetivo sobre a massa declarada: {fmt_pct(ano["percentual_efetivo"])}. {preco}')
+            f'Percentual efetivo sobre a massa declarada: {fmt_pct(ano["percentual_efetivo"])}.')
 
 
 def _tabela_investimento(calc):
-    linhas = [["Subtotal", fmt_moeda(calc["subtotal"])]]
+    if calc["regime"] == "plano":
+        plano = calc["plano"]
+        linhas = [[f'Plano até {fmt_num(plano["ate_t"], 0)} t · {fmt_moeda(plano["preco_t"])} por tonelada',
+                   fmt_moeda(calc["subtotal"])]]
+    else:
+        linhas = [[f'{fmt_num(calc["compensar"], 3)} t a compensar × {fmt_moeda(calc["preco_t"])} por tonelada',
+                   fmt_moeda(calc["subtotal"])]]
     if calc["desconto_valor"]:
         linhas.append([f'Desconto ({fmt_pct(calc["desconto_percentual"])})',
                        f'- {fmt_moeda(calc["desconto_valor"])}'])
@@ -289,8 +289,8 @@ def gerar_pdf(proposta, calc, parametros):
     ])]
 
     condicoes = [parametros["proposta"]["condicoes"]]
-    if proposta.get("vigencia_precos"):
-        condicoes.append(f'Tabela de preços por tonelada: vigência {proposta["vigencia_precos"]}.')
+    if proposta["proposta"].get("forma_pagamento"):
+        condicoes.append(f'Forma de pagamento: {proposta["proposta"]["forma_pagamento"]}')
     for ano in sorted(calc["por_ano"], key=lambda a: a["ano"]):
         texto = ano["regra"]["texto"]
         if texto and texto not in condicoes:

@@ -7,6 +7,12 @@
   "proposta": {
     "prefixo_numero": "AMB",
     "validade_dias": 30,
-    "condicoes": "Valores expressos em reais (R$). Massa a compensar calculada sobre o volume autodeclarado pelo cliente e o percentual de recuperação de cada UF no ano-base. Preço por tonelada conforme tabela vigente por UF e material; massas de até 5 t por ano-base seguem a tabela de pacotes. Pagamento e prazos conforme proposta comercial."
+    "condicoes": "Valores expressos em reais (R$). Massa a compensar calculada sobre o volume autodeclarado pelo cliente e o percentual de recuperação de cada UF no ano-base.",
+    "forma_pagamento": "30 dias após o aceite desta proposta."
+  },
+  "contato_padrao": {
+    "email": "thuise.matsumura@ambipar.com",
+    "telefone": "+55 11 99810-8922",
+    "_comentario": "Usado no último slide do PPT quando o responsável não informar e-mail/telefone."
   }
 }

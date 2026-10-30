@@ -10,7 +10,9 @@
   const STORAGE_KEY = "ambipar-propostas-rascunho-v1";
   const PREFIXO = String(CFG.numero_sugerido).split("-")[0];
   const CAT = CFG.precos.categorias;
-  const PACOTES = CFG.precos.pacotes;
+  const PLANOS = CFG.precos.planos;
+  const DRE = CFG.dre;
+  const CLASSES = Object.keys(DRE.mao_de_obra_por_t);
 
   const NOMES_UF = {
     "acre": "AC", "alagoas": "AL", "amazonas": "AM", "amapa": "AP", "bahia": "BA", "ceara": "CE",
@@ -82,11 +84,16 @@
         validade_dias: String(CFG.validade_dias),
         responsavel: base?.proposta.responsavel || "",
         email_responsavel: base?.proposta.email_responsavel || "",
+        telefone_responsavel: base?.proposta.telefone_responsavel || "",
+        forma_pagamento: CFG.forma_pagamento,
         observacoes: "",
       },
       comercial: {
         precos_uf: {},                       // {UF: [papel, plástico, vidro, metal]} só o que foi editado
-        pacotes: PACOTES.map(() => ""),      // preço editado de cada pacote ("" = padrão)
+        planos: PLANOS.map(() => ""),        // R$/t editado de cada plano ("" = padrão)
+        classe_mo: DRE.classe_padrao,
+        margem_alvo: fmt(DRE.margem_alvo * 100, 2, 0),
+        preco_t: "",                         // preço de venda acima de 5 t ("" = sugerido)
         desconto_percentual: "",
         outro_material_nome: "",
         outro_categoria: "",
@@ -119,8 +126,12 @@
       if (!ESTADOS.includes(uf) || !Array.isArray(vals) || vals.length !== CAT.length) delete s.comercial.precos_uf[uf];
       else s.comercial.precos_uf[uf] = vals.map((v) => (v === null || v === undefined ? "" : String(v)));
     }
-    if (!Array.isArray(s.comercial.pacotes) || s.comercial.pacotes.length !== PACOTES.length) s.comercial.pacotes = padrao.comercial.pacotes;
-    s.comercial.pacotes = s.comercial.pacotes.map((v) => (v === null || v === undefined ? "" : String(v)));
+    delete s.comercial.pacotes;
+    if (!Array.isArray(s.comercial.planos) || s.comercial.planos.length !== PLANOS.length) s.comercial.planos = padrao.comercial.planos;
+    s.comercial.planos = s.comercial.planos.map((v) => (v === null || v === undefined ? "" : String(v)));
+    if (!CLASSES.includes(s.comercial.classe_mo)) s.comercial.classe_mo = DRE.classe_padrao;
+    ["margem_alvo", "preco_t"].forEach((k) => { s.comercial[k] = s.comercial[k] === null || s.comercial[k] === undefined ? padrao.comercial[k] : String(s.comercial[k]); });
+    if (!s.proposta.forma_pagamento) s.proposta.forma_pagamento = CFG.forma_pagamento;
     if (!CAT.includes(s.comercial.outro_categoria)) s.comercial.outro_categoria = "";
     for (const [y, ufs] of Object.entries(salvo.anos || {})) {
       if (!ANOS.includes(y)) continue;
@@ -230,16 +241,63 @@
   }
   const precoUF = (uf, j) => precoEditado(uf, j) ?? precoPadrao(uf, j);
   const mediaCategoria = (j) => soma(ESTADOS.map((uf) => precoUF(uf, j))) / ESTADOS.length;
-  function pacotes() {
-    return PACOTES.map((p, k) => {
-      const v = num(S.comercial.pacotes[k]);
-      return { ate_t: p.ate_t, preco: S.comercial.pacotes[k] !== "" && Number.isFinite(v) && v >= 0 ? v : p.preco };
+  function planos() {
+    return PLANOS.map((p, k) => {
+      const v = num(S.comercial.planos[k]);
+      return { ate_t: p.ate_t, preco_t: S.comercial.planos[k] !== "" && Number.isFinite(v) && v >= 0 ? v : p.preco_t };
     });
   }
-  function pacoteDe(compensar) {
-    if (compensar <= 0) return null;
-    return pacotes().find((p) => compensar <= p.ate_t + 1e-9) || null;
+  const planoPara = (t) => (t > 0 ? planos().find((p) => t <= p.ate_t + 1e-9) || null : null);
+  const valorPlano = (t, p) => (CFG.precos.faixa_cheia ? p.ate_t : t) * p.preco_t;
+
+  // ---------- DRE (espelha servicos/precificacao.py) ----------
+  function custoDireto(linhas) {
+    let credito = 0, rec = 0, custodia = 0, toneladas = 0;
+    linhas.forEach(([custoT, j, t]) => {
+      credito += t * custoT;
+      rec += t * DRE.rec_pct * custoT * DRE.taxa_rec;
+      custodia += t * DRE.coop_pct * DRE.custodia_por_t[CAT[j]];
+      toneladas += t;
+    });
+    const auditoria = toneladas * DRE.auditoria_por_t;
+    return { credito, rec, custodia, auditoria, toneladas, total: credito + rec + custodia + auditoria };
   }
+  function dreResultado(F, custos, classe) {
+    const cofins = F * DRE.cofins, pis = F * DRE.pis;
+    const receitaLiquida = F - cofins - pis;
+    const lucroBruto = receitaLiquida - custos.total;
+    const base = Math.max(lucroBruto, 0);
+    const ir = base * DRE.ir, csll = base * DRE.csll;
+    const irAdicional = Math.max(lucroBruto - DRE.ir_adicional_limite, 0) * DRE.ir_adicional;
+    const lucroLiquido = lucroBruto - ir - csll - (DRE.subtrair_ir_adicional ? irAdicional : 0);
+    const equipe = custos.toneladas * DRE.mao_de_obra_por_t[classe];
+    const comissao = F * DRE.comissao_pct;
+    const resultado = lucroLiquido - equipe - DRE.beneficios - comissao;
+    return { F, cofins, pis, receitaLiquida, custos, lucroBruto, ir, csll, irAdicional, lucroLiquido,
+      equipe, comissao, resultado, margem: F ? resultado / F : 0 };
+  }
+  function precoParaMargem(custos, classe, margem) {
+    const t = custos.toneladas;
+    if (t <= 0) return 0;
+    const m = (p) => dreResultado(p * t, custos, classe).margem;
+    let baixo = 0, alto = 1000;
+    while (m(alto) < margem && alto < 1e7) alto *= 2;
+    for (let k = 0; k < 80; k++) {
+      const meio = (baixo + alto) / 2;
+      if (m(meio) < margem) baixo = meio; else alto = meio;
+    }
+    return Math.ceil(Math.round(alto * 100 * 1e6) / 1e6) / 100;
+  }
+  const margemAlvo = () => {
+    const v = num(S.comercial.margem_alvo);
+    return Number.isFinite(v) && v < 100 ? v / 100 : DRE.margem_alvo;
+  };
+  const precoInformado = () => {
+    if (S.comercial.preco_t === "") return null;
+    const v = num(S.comercial.preco_t);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  };
+
   const precosEditados = () => Object.entries(S.comercial.precos_uf)
     .flatMap(([uf, vals]) => vals.map((_, j) => [uf, j])).filter(([uf, j]) => {
       const v = precoEditado(uf, j);
@@ -254,7 +312,7 @@
     return out;
   }
 
-  // Calcula um ano isolado; usado pelo resumo, pela tela nacional e pelo assistente.
+  // Calcula um ano isolado (massas e linhas de custo); o preço sai do total da proposta.
   function calcAno(y, { totais, rec } = {}) {
     const r = rec ?? recuperacao(y);
     const nacional = totais !== undefined || modo(y) === "nacional";
@@ -262,68 +320,75 @@
     const estados = nacional ? distribuir(y, tot) : (S.anos[y] || {});
     const declarado = Array(NM).fill(0);
     const compensar = Array(NM).fill(0);
-    let valor = Array(NM).fill(0);
     const linhas = [];
+    const custo = [];
     if (estados) {
       ESTADOS.forEach((uf) => {
         const vals = estados[uf];
         if (!vals) return;
         const p = pctUF(y, uf, r);
-        const linha = { uf, p, declarado: 0, compensar: 0, valor: 0 };
+        const linha = { uf, p, declarado: 0, compensar: 0 };
         vals.forEach((v, i) => {
           const c = v * p;
-          const val = c * precoUF(uf, CAT.indexOf(catMaterial(i)));
-          declarado[i] += v; compensar[i] += c; valor[i] += val;
-          linha.declarado += v; linha.compensar += c; linha.valor += val;
+          const j = CAT.indexOf(catMaterial(i));
+          declarado[i] += v; compensar[i] += c;
+          linha.declarado += v; linha.compensar += c;
+          if (c) custo.push([precoUF(uf, j), j, c]);
         });
         linhas.push(linha);
       });
     } else {
       const p = Math.max(r, minimo(y)) / 100;
       tot.forEach((v, i) => {
+        const j = CAT.indexOf(catMaterial(i));
         declarado[i] = v; compensar[i] = v * p;
-        valor[i] = compensar[i] * mediaCategoria(CAT.indexOf(catMaterial(i)));
+        if (compensar[i]) custo.push([mediaCategoria(j), j, compensar[i]]);
       });
     }
-    const totalCompensar = soma(compensar);
-    const valorTabela = soma(valor);
-    const pacote = pacoteDe(totalCompensar);
-    if (pacote) {
-      const fator = pacote.preco / totalCompensar;
-      valor = compensar.map((c) => c * fator);
-      linhas.forEach((l) => (l.valor = l.compensar * fator));
-    }
-    return { nacional, distribuido: !!estados, rec: r, declarado, compensar, valor, linhas, valorTabela, pacote };
+    return { nacional, distribuido: !!estados, rec: r, declarado, compensar, linhas, custo };
   }
 
   function calcular() {
     const declarado = Array(NM).fill(0);
     const compensar = Array(NM).fill(0);
-    const valor = Array(NM).fill(0);
     const estados = new Set();
     const anos = anosComVolume();
     const porAno = {};
     const semDistribuicao = [];
+    const linhasCusto = [];
 
     for (const y of anos) {
       const c = calcAno(y);
       porAno[y] = c;
       c.declarado.forEach((v, i) => (declarado[i] += v));
       c.compensar.forEach((v, i) => (compensar[i] += v));
-      c.valor.forEach((v, i) => (valor[i] += v));
       c.linhas.forEach((l) => estados.add(l.uf));
+      linhasCusto.push(...c.custo);
       if (!c.distribuido) semDistribuicao.push(y);
     }
-    const subtotal = soma(valor);
+    const totalCompensar = soma(compensar);
+    const custos = custoDireto(linhasCusto);
+    const classe = S.comercial.classe_mo;
+    const sugerido = precoParaMargem(custos, classe, margemAlvo());
+    const plano = planoPara(totalCompensar);
+    let subtotal, precoT;
+    if (plano) { subtotal = valorPlano(totalCompensar, plano); precoT = plano.preco_t; }
+    else { precoT = precoInformado() ?? sugerido; subtotal = totalCompensar * precoT; }
+    const fator = totalCompensar ? subtotal / totalCompensar : 0;
+    const valor = compensar.map((c) => c * fator);
     const desc = Math.min(Math.max(num(S.comercial.desconto_percentual) || 0, 0), 100) / 100;
+    const total = subtotal * (1 - desc);
     return {
       anos, porAno, declarado, compensar, valor, subtotal, semDistribuicao,
       estados: [...estados],
       totalDeclarado: soma(declarado),
-      totalCompensar: soma(compensar),
+      totalCompensar,
+      regime: plano ? "plano" : "dre",
+      plano, precoT, fator, sugerido, custos,
+      dre: dreResultado(total, custos, classe),
       desconto: subtotal * desc,
       descPct: desc,
-      total: subtotal * (1 - desc),
+      total,
     };
   }
 
@@ -893,45 +958,110 @@
     $("#catMapa").innerHTML = MATERIAIS.map((_, i) => `<span>${nomeMaterial(i)} → <b>${titulo(catMaterial(i))}</b></span>`).join("");
   }
 
-  function montarPacotes() {
-    $("#pacotes").innerHTML = PACOTES.map((p, k) => `<div class="pack ${S.comercial.pacotes[k] !== "" ? "edited" : ""}" data-pack="${k}">
+  function montarPlanos() {
+    $("#planos").innerHTML = PLANOS.map((p, k) => `<div class="pack ${S.comercial.planos[k] !== "" ? "edited" : ""}" data-pack="${k}">
       <span>Até ${fmt(p.ate_t, 0)} t</span>
-      <label class="money"><span>R$</span><input type="text" inputmode="decimal" data-pacote="${k}" value="${fmt(pacotes()[k].preco, 2)}" aria-label="Pacote até ${p.ate_t} t"></label>
+      <label class="money"><span>R$/t</span><input type="text" inputmode="decimal" data-plano="${k}" value="${fmt(planos()[k].preco_t, 2)}" aria-label="Plano até ${p.ate_t} t (R$ por tonelada)"></label>
+      <small data-plano-total="${k}"></small>
     </div>`).join("");
+    $("#classeMo").innerHTML = CLASSES.map((c) => `<button type="button" role="radio" data-classe="${c}">${c}<small>${money(DRE.mao_de_obra_por_t[c])}/t</small></button>`).join("");
   }
 
-  $("#pacotes").addEventListener("input", (e) => {
-    const inp = e.target.closest("[data-pacote]");
+  $("#planos").addEventListener("input", (e) => {
+    const inp = e.target.closest("[data-plano]");
     if (!inp) return;
-    const k = +inp.dataset.pacote;
+    const k = +inp.dataset.plano;
     const v = num(inp.value);
     const ok = Number.isFinite(v) && v >= 0;
     inp.closest(".money").style.boxShadow = ok ? "" : "inset 0 0 0 1.5px var(--danger)";
-    S.comercial.pacotes[k] = ok && Math.abs(v - PACOTES[k].preco) > 1e-9 ? inp.value : (ok ? "" : inp.value);
-    inp.closest(".pack").classList.toggle("edited", S.comercial.pacotes[k] !== "");
+    S.comercial.planos[k] = ok && Math.abs(v - PLANOS[k].preco_t) < 1e-9 ? "" : inp.value;
+    inp.closest(".pack").classList.toggle("edited", S.comercial.planos[k] !== "");
     atualizarTudo({ grade: false });
   });
-  $("#pacotes").addEventListener("focusout", (e) => {
-    const inp = e.target.closest("[data-pacote]");
+  $("#planos").addEventListener("focusout", (e) => {
+    const inp = e.target.closest("[data-plano]");
     if (inp && Number.isFinite(num(inp.value))) inp.value = fmt(num(inp.value), 2);
   });
-  $("#restaurarPacotes").addEventListener("click", () => {
-    S.comercial.pacotes = PACOTES.map(() => "");
-    montarPacotes();
+  $("#restaurarPlanos").addEventListener("click", () => {
+    S.comercial.planos = PLANOS.map(() => "");
+    montarPlanos();
     atualizarTudo({ grade: false });
-    toast("Preços dos pacotes restaurados.", "ok");
+    toast("Preços dos planos restaurados.", "ok");
   });
+  $("#classeMo").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-classe]");
+    if (!btn) return;
+    S.comercial.classe_mo = btn.dataset.classe;
+    atualizarTudo({ grade: false });
+  });
+  $("#usarSugerido").addEventListener("click", () => {
+    S.comercial.preco_t = "";
+    $("#precoVenda").value = "";
+    atualizarTudo({ grade: false });
+    toast("Usando o preço sugerido pela margem-alvo.", "ok");
+  });
+
+  function renderPreco(r) {
+    const dreAtivo = r.anos.length > 0 && r.regime === "dre";
+    $("#cardPlanos").classList.toggle("ativo", r.anos.length > 0 && r.regime === "plano");
+    $("#cardDre").classList.toggle("ativo", dreAtivo);
+    $("#regime").innerHTML = !r.anos.length ? "Informe volumes para calcular o preço."
+      : r.regime === "plano"
+        ? `<span class="chip">Massa a compensar total <b>${fmt(r.totalCompensar, 3, 3)} t</b></span> → <span class="chip">Plano até <b>${fmt(r.plano.ate_t, 0)} t</b> · ${money(r.plano.preco_t)}/t = <b>${money(r.subtotal)}</b></span>`
+        : `<span class="chip">Massa a compensar total <b>${fmt(r.totalCompensar, 3, 3)} t</b></span> → <span class="chip">DRE · ${money(r.precoT)}/t = <b>${money(r.subtotal)}</b></span>`;
+    PLANOS.forEach((p, k) => {
+      const pl = planos()[k];
+      $(`[data-plano-total="${k}"]`).textContent = `Total ${money(pl.ate_t * pl.preco_t)}`;
+      $(`[data-pack="${k}"]`).classList.toggle("atual", r.regime === "plano" && r.plano?.ate_t === pl.ate_t);
+    });
+    $$("#classeMo [data-classe]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.classe === S.comercial.classe_mo);
+      b.setAttribute("aria-checked", b.dataset.classe === S.comercial.classe_mo);
+    });
+    const venda = $("#precoVenda");
+    venda.placeholder = `Sugerido ${fmt(r.sugerido, 2)}`;
+    venda.classList.toggle("invalid", S.comercial.preco_t !== "" && precoInformado() === null);
+
+    const d = r.dre;
+    const linha = (rotulo, v, cls = "") => `<tr class="${cls}"><td>${rotulo}</td><td>${money(v)}</td></tr>`;
+    const alvo = margemAlvo();
+    $("#dre").innerHTML = !r.anos.length ? "" : `
+      <table><tbody>
+        ${linha("Faturamento", d.F, "tot")}
+        ${linha(`COFINS (${pct(DRE.cofins * 100)})`, -d.cofins, "sub")}
+        ${linha(`PIS (${pct(DRE.pis * 100)})`, -d.pis, "sub")}
+        ${linha("Receita líquida", d.receitaLiquida, "tot")}
+        ${linha("Custo direto", -d.custos.total, "tot")}
+        ${linha("Crédito (tabela por UF)", -d.custos.credito, "sub")}
+        ${linha(`Rec+ (${pct(DRE.rec_pct * 100)} × ${pct(DRE.taxa_rec * 100)})`, -d.custos.rec, "sub")}
+        ${linha("Custódia (coop)", -d.custos.custodia, "sub")}
+        ${linha("Auditoria", -d.custos.auditoria, "sub")}
+      </tbody></table>
+      <table><tbody>
+        ${linha("Lucro bruto", d.lucroBruto, "tot")}
+        ${linha(`IR (${pct(DRE.ir * 100)})`, -d.ir, "sub")}
+        ${linha(`CSLL (${pct(DRE.csll * 100)})`, -d.csll, "sub")}
+        ${DRE.subtrair_ir_adicional ? linha("IR adicional", -d.irAdicional, "sub") : ""}
+        ${linha("Lucro líquido", d.lucroLiquido, "tot")}
+        ${linha(`Mão de obra classe ${S.comercial.classe_mo}`, -d.equipe, "sub")}
+        ${linha(`Comissão (${pct(DRE.comissao_pct * 100)})`, -d.comissao, "sub")}
+        ${linha("Resultado final", d.resultado, "res")}
+      </tbody></table>
+      <div class="margem ${d.margem < alvo - 1e-9 ? "baixa" : ""}">Margem <b>${pct(d.margem * 100)}</b>
+        · alvo ${pct(alvo * 100)} · preço sugerido ${money(r.sugerido)}/t
+        ${!dreAtivo ? "· (informativo: até 5 t vale o plano)" : ""}
+        ${!DRE.subtrair_ir_adicional && d.irAdicional > 0 ? `· IR adicional de ${money(d.irAdicional)} não descontado (como na planilha)` : ""}</div>`;
+  }
 
   function renderValoresAno(r) {
     if (!r.anos.length) { $("#valoresAno").innerHTML = ""; return; }
     $("#valoresAno").innerHTML = `<table class="mini-table">
-      <thead><tr><th>Ano-base</th><th>A compensar (t)</th><th>Regra de preço</th><th>Valor</th></tr></thead>
+      <thead><tr><th>Ano-base</th><th>A compensar (t)</th><th>Rateio</th><th>Valor</th></tr></thead>
       <tbody>${r.anos.map((y) => {
-        const c = r.porAno[y];
-        const regraTxt = c.pacote ? `<span class="tag-pack">Pacote até ${fmt(c.pacote.ate_t, 0)} t</span> tabela daria ${money(c.valorTabela)}` : "Tabela por UF e material";
-        return `<tr><td>${y}</td><td>${fmt(soma(c.compensar), 3, 3)}</td><td>${regraTxt}</td><td>${money(soma(c.valor))}</td></tr>`;
+        const c = soma(r.porAno[y].compensar);
+        return `<tr><td>${y}</td><td>${fmt(c, 3, 3)}</td><td>${pct(r.totalCompensar ? (c / r.totalCompensar) * 100 : 0)}</td><td>${money(c * r.fator)}</td></tr>`;
       }).join("")}</tbody>
-      <tfoot><tr><td>Total</td><td>${fmt(r.totalCompensar, 3, 3)}</td><td></td><td>${money(r.subtotal)}</td></tr></tfoot>
+      <tfoot><tr><td>Total</td><td>${fmt(r.totalCompensar, 3, 3)}</td><td>${money(r.fator)}/t</td><td>${money(r.subtotal)}</td></tr></tfoot>
     </table>`;
   }
 
@@ -1015,8 +1145,11 @@
     $("#sumEstados").textContent = r.estados.length || (r.anos.length ? "Nacional" : 0);
     $("#sumAnos").textContent = r.anos.length
       ? r.anos.map((y) => (modo(y) === "nacional" ? `${y} (BR)` : y)).join(", ") : "—";
-    $("#sumDesconto").textContent = r.desconto
-      ? `Subtotal ${money(r.subtotal)} · desconto ${fmt(r.descPct * 100, 2, 0)}% (− ${money(r.desconto)})` : "";
+    const regimeTxt = !r.anos.length ? "" : r.regime === "plano"
+      ? `Plano até ${fmt(r.plano.ate_t, 0)} t · ${money(r.plano.preco_t)}/t`
+      : `DRE · ${money(r.precoT)}/t · margem ${pct(r.dre.margem * 100)}`;
+    $("#sumDesconto").textContent = [regimeTxt, r.desconto
+      ? `subtotal ${money(r.subtotal)} − ${fmt(r.descPct * 100, 2, 0)}% (${money(r.desconto)})` : ""].filter(Boolean).join(" · ");
     $("#validadeAte").value = validadeAte();
 
     const el = $("#sumTotal");
@@ -1047,8 +1180,9 @@
     if (provisorias.length) alertas.push(`${provisorias.join(", ")} usa a tabela CONFAZ de ${CFG.confaz_origem[provisorias[0]]} (a do ano ainda não foi validada).`);
     const semGuia = r.anos.filter((y) => !CFG.anos_planilha.map(String).includes(y));
     if (semGuia.length) alertas.push(`A planilha modelo não tem a guia ${semGuia.join(", ")}.`);
-    const editados = precosEditados().length + S.comercial.pacotes.filter((v) => v !== "").length;
-    if (editados) alertas.push(`${editados} preço(s) editado(s) nesta proposta (tabela ou pacotes).`);
+    const editados = precosEditados().length + S.comercial.planos.filter((v) => v !== "").length;
+    if (editados) alertas.push(`${editados} valor(es) editado(s) nesta proposta (custos ou planos).`);
+    if (r.anos.length && r.regime === "dre" && r.dre.margem < margemAlvo() - 1e-9) alertas.push(`Margem da DRE (${pct(r.dre.margem * 100)}) abaixo da margem-alvo (${pct(margemAlvo() * 100)}).`);
     if ($$("#gridBody input.bad").length) alertas.push(`Há células com valor inválido em ${S.anoAtivo}; elas não entram no cálculo.`);
     if (!CFG.modelo_ppt) alertas.push("Modelo PowerPoint ainda não está em modelo/Proposta_Comercial.pptx.");
     $("#alerts").innerHTML = alertas.map((a) => `<li>${a}</li>`).join("");
@@ -1065,6 +1199,7 @@
     renderNacional();
     renderRecuperacao();
     renderPrecosCard();
+    renderPreco(r);
     renderValoresAno(r);
     MATERIAIS.forEach((_, i) => ($(`[data-col-head="${i}"]`, grid.head).textContent = nomeMaterial(i)));
     renderResumo(r);
@@ -1093,7 +1228,10 @@
       proposta: S.proposta,
       comercial: {
         precos_uf,
-        pacotes: S.comercial.pacotes,
+        planos: S.comercial.planos,
+        classe_mo: S.comercial.classe_mo,
+        margem_alvo: S.comercial.margem_alvo,
+        preco_t: S.comercial.preco_t,
         desconto_percentual: S.comercial.desconto_percentual,
         outro_material_nome: S.comercial.outro_material_nome,
         outro_categoria: S.comercial.outro_categoria,
@@ -1207,7 +1345,7 @@
     abertos.clear();
     $("#recuperacao").dataset.chave = "";
     preencherCampos();
-    montarPacotes();
+    montarPlanos();
     atualizarTudo();
   }
 

@@ -53,9 +53,9 @@ def _gravar(path, dados):
 def _resumo(proposta, calc):
     cliente, dados = proposta["cliente"], proposta["proposta"]
     detalhes = []
+    regra_preco = (f'Plano até {calc["plano"]["ate_t"]:g} t' if calc["regime"] == "plano"
+                   else "DRE (acima de 5 t)")
     for ano in calc["por_ano"]:
-        regra_preco = (f'Pacote até {ano["pacote"]["ate_t"]:g} t' if ano["pacote"]
-                       else "Tabela por UF")
         for m in ano["materiais"]:
             detalhes.append({
                 "ano": ano["ano"], "modo": "Nacional (CONFAZ)" if ano["modo"] == "nacional" else "Por estados",
@@ -74,7 +74,9 @@ def _resumo(proposta, calc):
         "ufs": [e["uf"] for e in calc["por_estado"]],
         "declarado": calc["declarado"], "compensar": calc["compensar"],
         "subtotal": calc["subtotal"], "desconto_percentual": calc["desconto_percentual"],
-        "total": calc["total"], "detalhes": detalhes,
+        "total": calc["total"], "regra_preco": regra_preco, "preco_t": calc["preco_efetivo"],
+        "classe_mo": calc["dre"]["classe"], "custo_direto": calc["dre"]["custo_direto"],
+        "resultado": calc["dre"]["resultado"], "margem": calc["dre"]["margem"], "detalhes": detalhes,
     }
 
 
@@ -211,6 +213,8 @@ def gerar_relatorio():
         ("E-mail", 26, None), ("Telefone", 16, None), ("Responsável", 20, None),
         ("Anos-base", 16, None), ("Modo", 22, None), ("UFs", 30, None),
         ("Massa declarada (t)", 14, TON), ("Massa a compensar (t)", 14, TON),
+        ("Regra de preço", 18, None), ("Preço por t (R$)", 14, MOEDA), ("Classe MO", 9, None),
+        ("Custo direto (R$)", 16, MOEDA), ("Resultado DRE (R$)", 16, MOEDA), ("Margem DRE", 11, PCT),
         ("Valor calculado (R$)", 16, MOEDA), ("Desconto", 10, PCT), ("Valor da proposta (R$)", 16, MOEDA),
         ("Valor negociado (R$)", 16, MOEDA), ("Valor final (R$)", 16, MOEDA), ("Status", 15, None),
         ("Data da venda", 13, DATA), ("Observação da negociação", 34, None),
@@ -224,7 +228,9 @@ def gerar_relatorio():
             d["numero"], _data(r["data_proposta"]), _data(r["validade"]), r["cliente"], r["cnpj"],
             r["cidade_uf"], r["contato"], r["email"], r["telefone"], r["responsavel"],
             ", ".join(str(a) for a in sorted(r["anos"])), ", ".join(r["modos"]), ", ".join(r["ufs"]),
-            r["declarado"], r["compensar"], r["subtotal"], r["desconto_percentual"], r["total"],
+            r["declarado"], r["compensar"], r.get("regra_preco"), r.get("preco_t"), r.get("classe_mo"),
+            r.get("custo_direto"), r.get("resultado"), r.get("margem"),
+            r["subtotal"], r["desconto_percentual"], r["total"],
             negociado, negociado if negociado is not None else r["total"], reg.get("status"),
             _data(reg.get("data_venda")), reg.get("observacao"),
             d.get("criada_em", "").replace("T", " "), d.get("atualizada_em", "").replace("T", " "),

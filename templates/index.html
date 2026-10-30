@@ -102,9 +102,17 @@
           <span>Responsável comercial</span>
           <input type="text" data-bind="proposta.responsavel" placeholder="Seu nome">
         </label>
-        <label class="field span-2">
+        <label class="field">
           <span>E-mail do responsável</span>
           <input type="email" data-bind="proposta.email_responsavel" placeholder="voce@ambipar.com">
+        </label>
+        <label class="field">
+          <span>Telefone do responsável</span>
+          <input type="tel" data-bind="proposta.telefone_responsavel" placeholder="+55 11 90000-0000">
+        </label>
+        <label class="field span-4">
+          <span>Forma de pagamento</span>
+          <input type="text" data-bind="proposta.forma_pagamento">
         </label>
         <label class="field span-4">
           <span>Observações da proposta</span>
@@ -181,28 +189,55 @@
       <h3 class="sub">Recuperação por ano-base</h3>
       <div class="recuperacao" id="recuperacao"></div>
 
-      <h3 class="sub">Preço por tonelada compensada</h3>
+      <h3 class="sub">Preço</h3>
+      <div class="regime" id="regime"></div>
+
+      <div class="pack-card" id="cardPlanos">
+        <div class="price-card-head">
+          <div>
+            <b>Planos até 5 t <span class="tag-ativo" data-ativo="plano">Em uso</span></b>
+            <span>Pela massa a compensar total da proposta (soma de todos os anos). Cobra-se a faixa cheia do plano.</span>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="restaurarPlanos" type="button">Restaurar</button>
+        </div>
+        <div class="packs" id="planos"></div>
+      </div>
+
+      <div class="pack-card dre-card" id="cardDre">
+        <div class="price-card-head">
+          <div>
+            <b>Acima de 5 t · DRE <span class="tag-ativo" data-ativo="dre">Em uso</span></b>
+            <span>Preço de venda por tonelada com custos da tabela por UF, impostos, mão de obra e margem.</span>
+          </div>
+        </div>
+        <div class="dre-ctl">
+          <div class="field">
+            <span>Mão de obra</span>
+            <div class="segmented segmented-sm" id="classeMo" role="radiogroup" aria-label="Classe de mão de obra"></div>
+          </div>
+          <label class="field">
+            <span>Margem-alvo (%)</span>
+            <input type="text" inputmode="decimal" data-bind="comercial.margem_alvo" id="margemAlvo">
+          </label>
+          <label class="field">
+            <span>Preço de venda (R$/t)</span>
+            <input type="text" inputmode="decimal" data-bind="comercial.preco_t" id="precoVenda">
+          </label>
+          <button class="btn btn-ghost btn-sm" type="button" id="usarSugerido">Usar preço sugerido</button>
+        </div>
+        <div class="dre" id="dre"></div>
+      </div>
+
       <div class="price-card">
         <div class="price-card-head">
           <div>
-            <b>Tabela por UF e categoria</b>
+            <b>Custo por tonelada · UF × categoria</b>
             <span id="precoVigencia"></span>
           </div>
           <button class="btn btn-ghost btn-sm" id="abrirPrecos" type="button">Ver / editar tabela</button>
         </div>
         <div class="cat-avg" id="catMedias"></div>
         <div class="cat-map" id="catMapa"></div>
-      </div>
-
-      <div class="pack-card">
-        <div class="price-card-head">
-          <div>
-            <b>Pacotes até 5 t por ano-base</b>
-            <span>Até 5 t a compensar no ano, vale o preço fechado do pacote; acima disso, a tabela por UF.</span>
-          </div>
-          <button class="btn btn-ghost btn-sm" id="restaurarPacotes" type="button">Restaurar</button>
-        </div>
-        <div class="packs" id="pacotes"></div>
       </div>
 
       <div class="year-values" id="valoresAno"></div>
@@ -347,7 +382,7 @@
 <dialog class="modal wide" id="precosDialog" aria-labelledby="precosTitulo">
   <div class="modal-head">
     <div>
-      <h3 id="precosTitulo">Preço por tonelada · UF × categoria</h3>
+      <h3 id="precosTitulo">Custo por tonelada · UF × categoria</h3>
       <p class="modal-text" id="precosSub"></p>
     </div>
     <button class="icon-btn" type="button" data-close aria-label="Fechar">×</button>

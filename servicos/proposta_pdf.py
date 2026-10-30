@@ -175,8 +175,8 @@ def _descricao_ano(ano):
 def _tabela_investimento(calc):
     if calc["regime"] == "plano":
         plano = calc["plano"]
-        linhas = [[f'Plano até {fmt_num(plano["ate_t"], 0)} t · {fmt_moeda(plano["preco_t"])} por tonelada',
-                   fmt_moeda(calc["subtotal"])]]
+        linhas = [[f'{fmt_num(calc["compensar"], 3)} t a compensar × {fmt_moeda(plano["preco_t"])} por tonelada '
+                   f'(plano até {fmt_num(plano["ate_t"], 0)} t)', fmt_moeda(calc["subtotal"])]]
     else:
         linhas = [[f'{fmt_num(calc["compensar"], 3)} t a compensar × {fmt_moeda(calc["preco_t"])} por tonelada',
                    fmt_moeda(calc["subtotal"])]]

@@ -100,7 +100,7 @@ def gerar_excel_route():
         payload = request.get_json(silent=True) or {}
         ctx = contexto()
         volumes = volumes_para_planilha(validar_declaracao(payload, ctx), ctx)
-        metas = {ano: ctx["regras"][ano]["minimo"] / 100 for ano in volumes}
+        metas = {ano: r["minimo"] / 100 for ano, r in ctx["regras"].items()}
         return send_file(generate_excel(volumes, metas), as_attachment=True,
                          download_name=EXCEL_FILENAME, mimetype=MIME_XLSX)
     except (ValueError, FileNotFoundError) as exc:

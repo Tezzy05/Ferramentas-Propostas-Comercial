@@ -13,7 +13,8 @@ Massa a compensar = massa declarada × percentual aplicado.
 Preço (sobre a massa a compensar total da proposta, soma de todos os anos):
 - até 5 t: plano fechado com preço por tonelada da faixa;
 - acima de 5 t: preço de venda por tonelada com DRE (custo por UF × categoria,
-  impostos, mão de obra e margem). Ver servicos/precificacao.py.
+  impostos, mão de obra e margem); o preço vem do comercial (ou da referência)
+  ou é recalculado a partir da margem informada. Ver servicos/precificacao.py.
 """
 from datetime import date, datetime, timedelta
 import math
@@ -269,10 +270,13 @@ def validar_proposta(payload, ctx, parametros):
     classe = _texto(comercial_raw.get("classe_mo"), 2).upper() or dre["classe_padrao"]
     if classe not in dre["mao_de_obra_por_t"]:
         raise ValueError(f"Classe de mão de obra inválida: {classe}.")
-    bruto = comercial_raw.get("margem_alvo")
-    margem_alvo = dre["margem_alvo"] if bruto in (None, "") else normalize_number(bruto, "Margem-alvo") / 100
-    if margem_alvo >= 1:
-        raise ValueError("Margem-alvo: o percentual precisa ser menor que 100%.")
+    modo_preco = comercial_raw.get("modo_preco") or "preco"
+    if modo_preco not in ("preco", "margem"):
+        raise ValueError(f"Modo de preço inválido: {modo_preco}.")
+    bruto = comercial_raw.get("margem")
+    margem = None if bruto in (None, "") else normalize_number(bruto, "Margem") / 100
+    if margem is not None and margem >= 1:
+        raise ValueError("Margem: o percentual precisa ser menor que 100%.")
     bruto = comercial_raw.get("preco_t")
     preco_t = None if bruto in (None, "") else normalize_number(bruto, "Preço por tonelada")
 
@@ -301,7 +305,8 @@ def validar_proposta(payload, ctx, parametros):
         "planos": planos,
         "faixa_cheia": precos_cfg["faixa_cheia"],
         "classe_mo": classe,
-        "margem_alvo": margem_alvo,
+        "modo_preco": modo_preco,
+        "margem": margem,
         "preco_t": preco_t,
         "categorias": categorias,
         "categoria_material": categoria_material,
@@ -380,14 +385,18 @@ def calcular(proposta, ctx):
     dre_cfg = ctx["dre"]
     custos = custo_direto(linhas_custo, categorias, dre_cfg)
     plano = plano_para(total_t, proposta["planos"])
-    preco_sugerido = preco_para_margem(custos, proposta["classe_mo"], dre_cfg, proposta["margem_alvo"])
     if plano:
         regime = "plano"
         subtotal = valor_plano(total_t, plano, proposta["faixa_cheia"])
         preco_t = plano["preco_t"]
     else:
         regime = "dre"
-        preco_t = proposta["preco_t"] if proposta["preco_t"] is not None else preco_sugerido
+        if proposta["modo_preco"] == "margem" and proposta["margem"] is not None:
+            # Margem informada: recalcula o preço para a margem final (já com desconto).
+            preco_t = preco_para_margem(custos, proposta["classe_mo"], dre_cfg,
+                                        proposta["margem"], proposta["desconto"])
+        else:
+            preco_t = proposta["preco_t"] if proposta["preco_t"] is not None else dre_cfg["preco_referencia_t"]
         subtotal = total_t * preco_t
     fator = subtotal / total_t if total_t else 0.0   # R$ por tonelada efetivamente cobrado
 
@@ -435,13 +444,13 @@ def calcular(proposta, ctx):
         "plano": plano,
         "preco_t": preco_t,
         "preco_efetivo": fator,
-        "preco_sugerido": preco_sugerido,
+        "modo_preco": proposta["modo_preco"],
         "subtotal": subtotal,
         "desconto_percentual": proposta["desconto"],
         "desconto_valor": desconto_valor,
         "total": total,
         "dre": dre_resultado(total, custos, proposta["classe_mo"], dre_cfg),
-        "margem_alvo": proposta["margem_alvo"],
+        "margem_alvo": dre_cfg["margem_alvo"],
         "precos_editados": proposta["precos_editados"],
     }
 

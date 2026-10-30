@@ -4,7 +4,8 @@ Planilha de autodeclaração.
 O arquivo modelo/Declaracao_volume_embalagens.xlsx é tratado como template
 intocável: abrimos o modelo, preenchemos somente B5:K31 e devolvemos uma cópia.
 Ano-base sem guia no modelo (ex.: 2026) ganha, só na cópia, uma guia igual à
-do ano mais recente, com o ano em B1 e a meta do ano em L1.
+do ano mais recente. Na cópia, a meta de cada guia (L1) segue a regra do ano
+(config/regras_compensacao.json, que segue a planilha de regras CONFAZ/MMA).
 """
 from io import BytesIO
 from pathlib import Path
@@ -71,8 +72,9 @@ def _criar_guias(wb, anos, metas):
         ws = wb.copy_worksheet(base)
         ws.title = str(ano)
         ws["B1"] = ano
-        if ano in metas:
-            ws[META_CELL] = metas[ano]
+    for ws in _year_sheets(wb):
+        if int(ws.title) in metas:
+            ws[META_CELL] = metas[int(ws.title)]
     wb._sheets.sort(key=lambda ws: -int(ws.title) if re.fullmatch(r"\d{4}", ws.title) else 0)
 
 

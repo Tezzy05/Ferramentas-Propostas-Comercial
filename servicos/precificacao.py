@@ -3,9 +3,10 @@ Precificação da proposta.
 
 - Massa a compensar total (soma de todos os anos) de até 5 t: plano fechado,
   com preço por tonelada da faixa (1 t R$ 950/t, 2 t R$ 900/t ...).
-- Acima de 5 t: preço de venda por tonelada definido pelo comercial, com a
-  DRE (DRE_Exemplo.xlsx) mostrando custos, impostos e margem. Sem preço
-  informado, usa o preço que atinge a margem-alvo.
+- Acima de 5 t: preço de venda por tonelada com a DRE (DRE_Exemplo.xlsx)
+  mostrando custos, impostos e margem. O comercial informa o preço (padrão:
+  preço de referência da planilha) e vê a margem, ou informa a margem e o
+  preço é recalculado para atingi-la.
 """
 import math
 
@@ -68,14 +69,14 @@ def dre_resultado(faturamento, custos, classe, dre):
     }
 
 
-def preco_para_margem(custos, classe, dre, margem):
-    """Menor preço por tonelada (em centavos) que atinge a margem desejada."""
+def preco_para_margem(custos, classe, dre, margem, desconto=0.0):
+    """Menor preço por tonelada (em centavos) cuja margem final, já com desconto, atinge a desejada."""
     toneladas = custos["toneladas"]
-    if toneladas <= 0:
+    if toneladas <= 0 or desconto >= 1:
         return 0.0
 
     def margem_em(preco):
-        return dre_resultado(preco * toneladas, custos, classe, dre)["margem"]
+        return dre_resultado(preco * toneladas * (1 - desconto), custos, classe, dre)["margem"]
 
     baixo, alto = 0.0, 1000.0
     while margem_em(alto) < margem and alto < 1e7:

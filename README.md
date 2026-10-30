@@ -49,22 +49,26 @@ total             = valor pelo preço (abaixo) − desconto
 
 | Massa total | Regra |
 |---|---|
-| até 1 t | plano 1 t × R$ 950/t = R$ 950 |
-| até 2 t | plano 2 t × R$ 900/t = R$ 1.800 |
-| até 3 t | plano 3 t × R$ 800/t = R$ 2.400 |
-| até 4 t | plano 4 t × R$ 750/t = R$ 3.000 |
-| até 5 t | plano 5 t × R$ 740/t = R$ 3.700 |
+| até 1 t | massa × R$ 950/t |
+| até 2 t | massa × R$ 900/t |
+| até 3 t | massa × R$ 800/t |
+| até 4 t | massa × R$ 750/t (ex.: 3,9 t × 750 = R$ 2.925) |
+| até 5 t | massa × R$ 740/t |
 | acima de 5 t | massa × preço de venda por tonelada, conferido pela **DRE** |
 
-Os preços dos planos são editáveis em cada proposta e cobra-se a faixa cheia (`cobrar_faixa_cheia`
-em `config/precos_tonelada.json`). O valor é rateado entre anos, materiais e UFs pela massa.
+Os preços dos planos são editáveis em cada proposta (`cobrar_faixa_cheia: true` em
+`config/precos_tonelada.json` passaria a cobrar a faixa inteira). O valor é rateado entre anos,
+materiais e UFs pela massa.
 
 **DRE** (`config/dre.json`, fonte `DRE_Exemplo.xlsx`): custo direto por UF × categoria (crédito
 = massa × custo da tabela; rec+ = 45% × custo × 20%; custódia = 55% × R$ 1,32/t, vidro
 R$ 1,50/t; auditoria R$ 1,30/t), PIS 1,65% e COFINS 7,6% sobre o faturamento, IR 15% e CSLL 9%
 sobre o lucro bruto, mão de obra classe A/B/C (R$ 11,43 / 7,43 / 5,00 por t) e comissão de 1%.
-O painel sugere o preço por tonelada que atinge a margem-alvo (15%); o comercial pode digitar
-outro preço e ver a margem resultante. O IR adicional é calculado mas não descontado, como na
+Preço e margem andam juntos: o contrato abre no **preço de referência** da planilha
+(R$ 130/t) e a DRE já mostra a **margem do contrato**; se o comercial digitar um preço, a
+margem é recalculada; se digitar uma **margem**, o preço por tonelada e o valor do contrato são
+recalculados para chegar nela (já considerando o desconto). Os **cenários** 10%, 15%, 20% e 25%
+mostram preço e total de cada margem e aplicam com um clique. 15% é a referência visual. O IR adicional é calculado mas não descontado, como na
 planilha (`subtrair_ir_adicional`). A DRE é interna: não sai no PDF nem no PPT do cliente.
 
 Categorias de custo (`config/precos_tonelada.json`): Papel/Papelão e Longa Vida → **Papel**;
@@ -164,7 +168,8 @@ no próximo salvamento. A pasta `dados/` fica só no computador (não vai para o
 O arquivo `modelo/Declaracao_volume_embalagens.xlsx` é tratado como template intocável:
 a aplicação abre o modelo, zera B5:K31 dos 27 estados em todas as guias, grava os
 valores informados e envia a cópia. O modelo original nunca é sobrescrito. Ano-base sem
-guia no modelo (ex.: 2018, 2026) ganha, só na cópia, uma guia igual à do ano mais recente.
+guia no modelo (ex.: 2018, 2026) ganha, só na cópia, uma guia igual à do ano mais recente, e
+a meta de cada guia (L1) segue a regra do ano (planilha de regras CONFAZ/MMA).
 
 ## Estrutura
 

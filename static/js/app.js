@@ -92,8 +92,9 @@
         precos_uf: {},                       // {UF: [papel, plástico, vidro, metal]} só o que foi editado
         planos: PLANOS.map(() => ""),        // R$/t editado de cada plano ("" = padrão)
         classe_mo: DRE.classe_padrao,
-        margem_alvo: fmt(DRE.margem_alvo * 100, 2, 0),
-        preco_t: "",                         // preço de venda acima de 5 t ("" = sugerido)
+        modo_preco: "preco",                 // "preco": comercial define o preço; "margem": define a margem
+        preco_t: "",                         // preço de venda acima de 5 t ("" = referência)
+        margem: "",                          // margem final desejada, em %
         desconto_percentual: "",
         outro_material_nome: "",
         outro_categoria: "",
@@ -130,7 +131,9 @@
     if (!Array.isArray(s.comercial.planos) || s.comercial.planos.length !== PLANOS.length) s.comercial.planos = padrao.comercial.planos;
     s.comercial.planos = s.comercial.planos.map((v) => (v === null || v === undefined ? "" : String(v)));
     if (!CLASSES.includes(s.comercial.classe_mo)) s.comercial.classe_mo = DRE.classe_padrao;
-    ["margem_alvo", "preco_t"].forEach((k) => { s.comercial[k] = s.comercial[k] === null || s.comercial[k] === undefined ? padrao.comercial[k] : String(s.comercial[k]); });
+    delete s.comercial.margem_alvo;
+    ["preco_t", "margem"].forEach((k) => { s.comercial[k] = s.comercial[k] === null || s.comercial[k] === undefined ? padrao.comercial[k] : String(s.comercial[k]); });
+    if (!["preco", "margem"].includes(s.comercial.modo_preco)) s.comercial.modo_preco = "preco";
     if (!s.proposta.forma_pagamento) s.proposta.forma_pagamento = CFG.forma_pagamento;
     if (!CAT.includes(s.comercial.outro_categoria)) s.comercial.outro_categoria = "";
     for (const [y, ufs] of Object.entries(salvo.anos || {})) {
@@ -276,10 +279,10 @@
     return { F, cofins, pis, receitaLiquida, custos, lucroBruto, ir, csll, irAdicional, lucroLiquido,
       equipe, comissao, resultado, margem: F ? resultado / F : 0 };
   }
-  function precoParaMargem(custos, classe, margem) {
+  function precoParaMargem(custos, classe, margem, desconto = 0) {
     const t = custos.toneladas;
-    if (t <= 0) return 0;
-    const m = (p) => dreResultado(p * t, custos, classe).margem;
+    if (t <= 0 || desconto >= 1) return 0;
+    const m = (p) => dreResultado(p * t * (1 - desconto), custos, classe).margem;
     let baixo = 0, alto = 1000;
     while (m(alto) < margem && alto < 1e7) alto *= 2;
     for (let k = 0; k < 80; k++) {
@@ -288,9 +291,11 @@
     }
     return Math.ceil(Math.round(alto * 100 * 1e6) / 1e6) / 100;
   }
-  const margemAlvo = () => {
-    const v = num(S.comercial.margem_alvo);
-    return Number.isFinite(v) && v < 100 ? v / 100 : DRE.margem_alvo;
+  const margemAlvo = () => DRE.margem_alvo;
+  const margemInformada = () => {
+    if (S.comercial.margem === "") return null;
+    const v = num(S.comercial.margem);
+    return Number.isFinite(v) && v >= 0 && v < 100 ? v / 100 : null;
   };
   const precoInformado = () => {
     if (S.comercial.preco_t === "") return null;
@@ -369,14 +374,17 @@
     const totalCompensar = soma(compensar);
     const custos = custoDireto(linhasCusto);
     const classe = S.comercial.classe_mo;
-    const sugerido = precoParaMargem(custos, classe, margemAlvo());
+    const desc = Math.min(Math.max(num(S.comercial.desconto_percentual) || 0, 0), 100) / 100;
     const plano = planoPara(totalCompensar);
     let subtotal, precoT;
     if (plano) { subtotal = valorPlano(totalCompensar, plano); precoT = plano.preco_t; }
-    else { precoT = precoInformado() ?? sugerido; subtotal = totalCompensar * precoT; }
+    else {
+      const m = S.comercial.modo_preco === "margem" ? margemInformada() : null;
+      precoT = m !== null ? precoParaMargem(custos, classe, m, desc) : (precoInformado() ?? DRE.preco_referencia_t);
+      subtotal = totalCompensar * precoT;
+    }
     const fator = totalCompensar ? subtotal / totalCompensar : 0;
     const valor = compensar.map((c) => c * fator);
-    const desc = Math.min(Math.max(num(S.comercial.desconto_percentual) || 0, 0), 100) / 100;
     const total = subtotal * (1 - desc);
     return {
       anos, porAno, declarado, compensar, valor, subtotal, semDistribuicao,
@@ -384,7 +392,7 @@
       totalDeclarado: soma(declarado),
       totalCompensar,
       regime: plano ? "plano" : "dre",
-      plano, precoT, fator, sugerido, custos,
+      plano, precoT, fator, custos,
       dre: dreResultado(total, custos, classe),
       desconto: subtotal * desc,
       descPct: desc,
@@ -994,11 +1002,29 @@
     S.comercial.classe_mo = btn.dataset.classe;
     atualizarTudo({ grade: false });
   });
-  $("#usarSugerido").addEventListener("click", () => {
-    S.comercial.preco_t = "";
-    $("#precoVenda").value = "";
+  $("#precoVenda").addEventListener("input", (e) => {
+    S.comercial.modo_preco = "preco";
+    S.comercial.preco_t = e.target.value;
     atualizarTudo({ grade: false });
-    toast("Usando o preço sugerido pela margem-alvo.", "ok");
+  });
+  $("#margemContrato").addEventListener("input", (e) => {
+    S.comercial.modo_preco = "margem";
+    S.comercial.margem = e.target.value;
+    atualizarTudo({ grade: false });
+  });
+  ["#precoVenda", "#margemContrato"].forEach((sel) => $(sel).addEventListener("focusout", () => setTimeout(() => atualizarTudo({ grade: false }), 0)));
+  $("#usarReferencia").addEventListener("click", () => {
+    S.comercial.modo_preco = "preco";
+    S.comercial.preco_t = "";
+    atualizarTudo({ grade: false });
+    toast(`Preço de referência aplicado (${money(DRE.preco_referencia_t)}/t).`, "ok");
+  });
+  $("#cenarios").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-cenario]");
+    if (!btn) return;
+    S.comercial.modo_preco = "margem";
+    S.comercial.margem = btn.dataset.cenario;
+    atualizarTudo({ grade: false });
   });
 
   function renderPreco(r) {
@@ -1011,7 +1037,7 @@
         : `<span class="chip">Massa a compensar total <b>${fmt(r.totalCompensar, 3, 3)} t</b></span> → <span class="chip">DRE · ${money(r.precoT)}/t = <b>${money(r.subtotal)}</b></span>`;
     PLANOS.forEach((p, k) => {
       const pl = planos()[k];
-      $(`[data-plano-total="${k}"]`).textContent = `Total ${money(pl.ate_t * pl.preco_t)}`;
+      $(`[data-plano-total="${k}"]`).textContent = `até ${money(pl.ate_t * pl.preco_t)}`;
       $(`[data-pack="${k}"]`).classList.toggle("atual", r.regime === "plano" && r.plano?.ate_t === pl.ate_t);
     });
     $$("#classeMo [data-classe]").forEach((b) => {
@@ -1019,8 +1045,29 @@
       b.setAttribute("aria-checked", b.dataset.classe === S.comercial.classe_mo);
     });
     const venda = $("#precoVenda");
-    venda.placeholder = `Sugerido ${fmt(r.sugerido, 2)}`;
-    venda.classList.toggle("invalid", S.comercial.preco_t !== "" && precoInformado() === null);
+    const margemEl = $("#margemContrato");
+    const porMargem = S.comercial.modo_preco === "margem" && margemInformada() !== null;
+    if (document.activeElement !== venda) {
+      venda.value = S.comercial.modo_preco === "preco" && S.comercial.preco_t !== "" ? S.comercial.preco_t : fmt(r.regime === "dre" ? r.precoT : (porMargem ? precoParaMargem(r.custos, S.comercial.classe_mo, margemInformada(), r.descPct) : precoInformado() ?? DRE.preco_referencia_t), 2);
+    }
+    if (document.activeElement !== margemEl) {
+      margemEl.value = S.comercial.modo_preco === "margem" && S.comercial.margem !== "" ? S.comercial.margem : (r.anos.length ? fmt(r.dre.margem * 100, 2, 2) : "");
+    }
+    venda.classList.toggle("invalid", S.comercial.modo_preco === "preco" && S.comercial.preco_t !== "" && precoInformado() === null);
+    margemEl.classList.toggle("invalid", S.comercial.modo_preco === "margem" && S.comercial.margem !== "" && margemInformada() === null);
+    venda.classList.toggle("fixo", S.comercial.modo_preco === "preco");
+    margemEl.classList.toggle("fixo", S.comercial.modo_preco === "margem");
+    $("#usarReferencia").textContent = `Referência ${money(DRE.preco_referencia_t)}/t`;
+    $("#dreModo").innerHTML = !r.anos.length ? "" : (r.regime === "plano"
+      ? "Até 5 t vale o plano; a DRE abaixo é só informativa."
+      : porMargem
+        ? `Margem definida em <b>${pct(margemInformada() * 100)}</b> → preço recalculado para <b>${money(r.precoT)}/t</b>${r.descPct ? " (já considerando o desconto)" : ""}.`
+        : `Preço definido em <b>${money(r.precoT)}/t</b>${S.comercial.preco_t === "" ? " (referência da planilha)" : ""} → margem do contrato <b>${pct(r.dre.margem * 100)}</b>. Digite uma margem para recalcular o preço.`);
+    $("#cenarios").innerHTML = !r.anos.length || r.regime === "plano" ? "" : "Cenários:" + DRE.cenarios_margem.map((m) => {
+      const p = precoParaMargem(r.custos, S.comercial.classe_mo, m, r.descPct);
+      const atual = porMargem && Math.abs(margemInformada() - m) < 1e-9;
+      return `<button type="button" class="${atual ? "atual" : ""}" data-cenario="${fmt(m * 100, 2, 0)}"><b>${pct(m * 100)}</b>${money(p)}/t · ${money(r.totalCompensar * p * (1 - r.descPct))}</button>`;
+    }).join("");
 
     const d = r.dre;
     const linha = (rotulo, v, cls = "") => `<tr class="${cls}"><td>${rotulo}</td><td>${money(v)}</td></tr>`;
@@ -1048,7 +1095,7 @@
         ${linha("Resultado final", d.resultado, "res")}
       </tbody></table>
       <div class="margem ${d.margem < alvo - 1e-9 ? "baixa" : ""}">Margem <b>${pct(d.margem * 100)}</b>
-        · alvo ${pct(alvo * 100)} · preço sugerido ${money(r.sugerido)}/t
+        · referência ${pct(alvo * 100)}
         ${!dreAtivo ? "· (informativo: até 5 t vale o plano)" : ""}
         ${!DRE.subtrair_ir_adicional && d.irAdicional > 0 ? `· IR adicional de ${money(d.irAdicional)} não descontado (como na planilha)` : ""}</div>`;
   }
@@ -1182,7 +1229,8 @@
     if (semGuia.length) alertas.push(`A planilha modelo não tem a guia ${semGuia.join(", ")}.`);
     const editados = precosEditados().length + S.comercial.planos.filter((v) => v !== "").length;
     if (editados) alertas.push(`${editados} valor(es) editado(s) nesta proposta (custos ou planos).`);
-    if (r.anos.length && r.regime === "dre" && r.dre.margem < margemAlvo() - 1e-9) alertas.push(`Margem da DRE (${pct(r.dre.margem * 100)}) abaixo da margem-alvo (${pct(margemAlvo() * 100)}).`);
+    if (r.anos.length && r.regime === "dre" && r.dre.margem < 0) alertas.push(`Contrato com prejuízo: margem da DRE de ${pct(r.dre.margem * 100)}.`);
+    else if (r.anos.length && r.regime === "dre" && r.dre.margem < margemAlvo() - 1e-9) alertas.push(`Margem do contrato (${pct(r.dre.margem * 100)}) abaixo da referência de ${pct(margemAlvo() * 100)}.`);
     if ($$("#gridBody input.bad").length) alertas.push(`Há células com valor inválido em ${S.anoAtivo}; elas não entram no cálculo.`);
     if (!CFG.modelo_ppt) alertas.push("Modelo PowerPoint ainda não está em modelo/Proposta_Comercial.pptx.");
     $("#alerts").innerHTML = alertas.map((a) => `<li>${a}</li>`).join("");
@@ -1230,7 +1278,8 @@
         precos_uf,
         planos: S.comercial.planos,
         classe_mo: S.comercial.classe_mo,
-        margem_alvo: S.comercial.margem_alvo,
+        modo_preco: S.comercial.modo_preco,
+        margem: S.comercial.margem,
         preco_t: S.comercial.preco_t,
         desconto_percentual: S.comercial.desconto_percentual,
         outro_material_nome: S.comercial.outro_material_nome,

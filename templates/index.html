@@ -196,7 +196,7 @@
         <div class="price-card-head">
           <div>
             <b>Planos até 5 t <span class="tag-ativo" data-ativo="plano">Em uso</span></b>
-            <span>Pela massa a compensar total da proposta (soma de todos os anos). Cobra-se a faixa cheia do plano.</span>
+            <span>Pela massa a compensar total da proposta (soma de todos os anos): massa × R$/t da faixa.</span>
           </div>
           <button class="btn btn-ghost btn-sm" id="restaurarPlanos" type="button">Restaurar</button>
         </div>
@@ -216,15 +216,17 @@
             <div class="segmented segmented-sm" id="classeMo" role="radiogroup" aria-label="Classe de mão de obra"></div>
           </div>
           <label class="field">
-            <span>Margem-alvo (%)</span>
-            <input type="text" inputmode="decimal" data-bind="comercial.margem_alvo" id="margemAlvo">
+            <span>Preço de venda (R$/t)</span>
+            <input type="text" inputmode="decimal" id="precoVenda" autocomplete="off">
           </label>
           <label class="field">
-            <span>Preço de venda (R$/t)</span>
-            <input type="text" inputmode="decimal" data-bind="comercial.preco_t" id="precoVenda">
+            <span>Margem do contrato (%)</span>
+            <input type="text" inputmode="decimal" id="margemContrato" autocomplete="off">
           </label>
-          <button class="btn btn-ghost btn-sm" type="button" id="usarSugerido">Usar preço sugerido</button>
+          <button class="btn btn-ghost btn-sm" type="button" id="usarReferencia">Preço de referência</button>
         </div>
+        <p class="dre-modo" id="dreModo"></p>
+        <div class="cenarios" id="cenarios"></div>
         <div class="dre" id="dre"></div>
       </div>
 

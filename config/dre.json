@@ -1,5 +1,5 @@
 {
-  "_comentario": "Parâmetros da DRE usada na precificação acima de 5 t (fonte: DRE_Exemplo.xlsx). Custos sobre a massa a compensar por UF e categoria.",
+  "_comentario": "Parâmetros da DRE usada na precificação acima de 5 t (fonte: DRE_Exemplo.xlsx). Custos sobre a massa a compensar por UF e categoria. O contrato começa no 'preco_referencia_t' (VALOR/TON da planilha) e mostra a margem; ao informar uma margem, o preço é recalculado para atingi-la. 'margem_alvo' é a referência visual no painel.",
   "coop_pct": 0.55,
   "rec_pct": 0.45,
   "taxa_rec": 0.2,
@@ -25,5 +25,12 @@
   "ir_adicional_limite": 240000,
   "subtrair_ir_adicional": false,
   "csll": 0.09,
-  "margem_alvo": 0.15
+  "margem_alvo": 0.15,
+  "preco_referencia_t": 130,
+  "cenarios_margem": [
+    0.1,
+    0.15,
+    0.2,
+    0.25
+  ]
 }

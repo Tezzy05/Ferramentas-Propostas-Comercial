@@ -1,5 +1,5 @@
 {
-  "_comentario": "Custo por tonelada compensada, por UF e categoria de material (Papel, Plástico, Vidro, Metal). Fonte: 'TABELA VALORES P/ TONELADA - NOVA ABRIL/26'. É custo: acima de 5 t o preço de venda sai da DRE (config/dre.json). 'planos': preço por tonelada quando a massa a compensar da proposta (soma de todos os anos) é de até 5 t; cobra-se a faixa cheia do plano.",
+  "_comentario": "Custo por tonelada compensada, por UF e categoria de material (Papel, Plástico, Vidro, Metal). Fonte: 'TABELA VALORES P/ TONELADA - NOVA ABRIL/26'. É custo: acima de 5 t o preço de venda sai da DRE (config/dre.json). 'planos': preço por tonelada quando a massa a compensar da proposta (soma de todos os anos) é de até 5 t; valor = massa total × R$/t da faixa ('cobrar_faixa_cheia': true cobraria a faixa inteira).",
   "vigencia": "abril/2026",
   "categorias": [
     "PAPEL",
@@ -205,5 +205,5 @@
       "preco_t": 740
     }
   ],
-  "cobrar_faixa_cheia": true
+  "cobrar_faixa_cheia": false
 }

@@ -1,0 +1,36 @@
+{
+  "_comentario": "Parâmetros da DRE usada na precificação acima de 5 t (fonte: DRE_Exemplo.xlsx). Custos sobre a massa a compensar por UF e categoria. O contrato começa no 'preco_referencia_t' (VALOR/TON da planilha) e mostra a margem; ao informar uma margem, o preço é recalculado para atingi-la. 'margem_alvo' é a referência visual no painel.",
+  "coop_pct": 0.55,
+  "rec_pct": 0.45,
+  "taxa_rec": 0.2,
+  "custodia_por_t": {
+    "PAPEL": 1.32,
+    "PLÁSTICO": 1.32,
+    "VIDRO": 1.5,
+    "METAL": 1.32
+  },
+  "auditoria_por_t": 1.3,
+  "mao_de_obra_por_t": {
+    "A": 11.43,
+    "B": 7.43,
+    "C": 5.0
+  },
+  "classe_padrao": "C",
+  "beneficios": 0,
+  "comissao_pct": 0.01,
+  "cofins": 0.076,
+  "pis": 0.0165,
+  "ir": 0.15,
+  "ir_adicional": 0.1,
+  "ir_adicional_limite": 240000,
+  "subtrair_ir_adicional": false,
+  "csll": 0.09,
+  "margem_alvo": 0.15,
+  "preco_referencia_t": 130,
+  "cenarios_margem": [
+    0.1,
+    0.15,
+    0.2,
+    0.25
+  ]
+}

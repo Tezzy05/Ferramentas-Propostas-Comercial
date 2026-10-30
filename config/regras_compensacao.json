@@ -1,15 +1,34 @@
 {
-  "_comentario": "Percentual mínimo de recuperação por ano-base. 'minimo' vale para todas as UFs, exceto as listadas em 'excecoes'. Anos sem regra usam a célula L1 da planilha modelo. 'anos_nacional' são os anos que aceitam compensação nacional pela Metodologia CONFAZ.",
-  "anos_nacional": [2024, 2025, 2026],
+  "_comentario": "Percentual mínimo de recuperação por ano-base. 'minimo' vale para todas as UFs, exceto as listadas em 'excecoes'. Anos sem regra usam a célula L1 da planilha modelo ou, sem guia, 'minimo_padrao'. A planilha Regras_CONFAZ (time técnico) prevalece. 'anos_nacional': 'todos' libera a Metodologia CONFAZ em todos os anos.",
+  "anos_nacional": "todos",
+  "minimo_padrao": 22,
   "anos": {
+    "2021": {
+      "minimo": 22,
+      "excecoes": {},
+      "texto": "Ano-base 2021: o volume a recuperar deve ser de, no mínimo, 22% do total circulante."
+    },
+    "2024": {
+      "minimo": 30,
+      "excecoes": {},
+      "texto": "Ano-base 2024: percentual mínimo de compensação de 30% da massa declarada."
+    },
     "2025": {
       "minimo": 32,
-      "excecoes": { "SP": 33, "MT": 35, "MG": 32.5 },
+      "excecoes": {
+        "SP": 33,
+        "MT": 35,
+        "MG": 32.5
+      },
       "texto": "A meta mínima para a comprovação da logística reversa é de 32% para todos os estados brasileiros, conforme estabelecido pelo Decreto Federal 12.688, de 21 de outubro de 2025, exceto em MT (35%), SP (33%) e MG (32,5%), de acordo com as metas estaduais estabelecidas."
     },
     "2026": {
       "minimo": 33.1,
-      "excecoes": { "SP": 34, "MT": 40, "MG": 35 },
+      "excecoes": {
+        "SP": 34,
+        "MT": 40,
+        "MG": 35
+      },
       "texto": "Para o ano-base de 2026, a meta mínima para a comprovação da logística reversa é de 33,10% para todos os estados brasileiros, exceto em SP (34%), MT (40%) e MG (35%), de acordo com as metas estaduais estabelecidas."
     }
   }

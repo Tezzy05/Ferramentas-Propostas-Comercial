@@ -31,6 +31,10 @@
     </nav>
     <div class="topbar-actions">
       <span class="save-state" id="saveState">Rascunho salvo neste navegador</span>
+      <button class="btn btn-ghost btn-sm" id="abrirRegistro" type="button">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4h12v12H4zM4 8h12M8 8v8"/></svg>
+        Propostas
+      </button>
       <button class="btn btn-outline btn-sm" id="novaProposta" type="button">Nova proposta</button>
     </div>
   </div>
@@ -98,9 +102,17 @@
           <span>Responsável comercial</span>
           <input type="text" data-bind="proposta.responsavel" placeholder="Seu nome">
         </label>
-        <label class="field span-2">
+        <label class="field">
           <span>E-mail do responsável</span>
           <input type="email" data-bind="proposta.email_responsavel" placeholder="voce@ambipar.com">
+        </label>
+        <label class="field">
+          <span>Telefone do responsável</span>
+          <input type="tel" data-bind="proposta.telefone_responsavel" placeholder="+55 11 90000-0000">
+        </label>
+        <label class="field span-4">
+          <span>Forma de pagamento</span>
+          <input type="text" data-bind="proposta.forma_pagamento">
         </label>
         <label class="field span-4">
           <span>Observações da proposta</span>
@@ -170,24 +182,80 @@
         <span class="panel-index">03</span>
         <div>
           <h2>Recuperação e preços</h2>
-          <p>Cada UF usa o maior entre a recuperação contratada e a sua meta mínima. Valor = massa a compensar × preço por tonelada.</p>
+          <p>Recuperação nacional vale para todos os estados; ajuste estados individualmente quando preciso (sempre respeitando o mínimo da UF).</p>
         </div>
       </div>
 
-      <h3 class="sub">Recuperação contratada por ano-base</h3>
+      <h3 class="sub">Recuperação por ano-base</h3>
       <div class="recuperacao" id="recuperacao"></div>
 
-      <h3 class="sub">Preço por tonelada compensada</h3>
-      <div class="price-table" id="priceTable"></div>
+      <h3 class="sub">Preço</h3>
+      <div class="regime" id="regime"></div>
+
+      <div class="pack-card" id="cardPlanos">
+        <div class="price-card-head">
+          <div>
+            <b>Planos até 5 t <span class="tag-ativo" data-ativo="plano">Em uso</span></b>
+            <span>Pela massa a compensar total da proposta (soma de todos os anos): massa × R$/t da faixa.</span>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="restaurarPlanos" type="button">Restaurar</button>
+        </div>
+        <div class="packs" id="planos"></div>
+      </div>
+
+      <div class="pack-card dre-card" id="cardDre">
+        <div class="price-card-head">
+          <div>
+            <b>Acima de 5 t · DRE <span class="tag-ativo" data-ativo="dre">Em uso</span></b>
+            <span>Preço de venda por tonelada com custos da tabela por UF, impostos, mão de obra e margem.</span>
+          </div>
+        </div>
+        <div class="dre-ctl">
+          <div class="field">
+            <span>Mão de obra</span>
+            <div class="segmented segmented-sm" id="classeMo" role="radiogroup" aria-label="Classe de mão de obra"></div>
+          </div>
+          <label class="field">
+            <span>Preço de venda (R$/t)</span>
+            <input type="text" inputmode="decimal" id="precoVenda" autocomplete="off">
+          </label>
+          <label class="field">
+            <span>Margem do contrato (%)</span>
+            <input type="text" inputmode="decimal" id="margemContrato" autocomplete="off">
+          </label>
+          <button class="btn btn-ghost btn-sm" type="button" id="usarReferencia">Preço de referência</button>
+        </div>
+        <p class="dre-modo" id="dreModo"></p>
+        <div class="cenarios" id="cenarios"></div>
+        <div class="dre" id="dre"></div>
+      </div>
+
+      <div class="price-card">
+        <div class="price-card-head">
+          <div>
+            <b>Custo por tonelada · UF × categoria</b>
+            <span id="precoVigencia"></span>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="abrirPrecos" type="button">Ver / editar tabela</button>
+        </div>
+        <div class="cat-avg" id="catMedias"></div>
+        <div class="cat-map" id="catMapa"></div>
+      </div>
+
+      <div class="year-values" id="valoresAno"></div>
 
       <div class="fields fields-4 price-extras">
         <label class="field">
           <span>Desconto (%)</span>
           <input type="text" inputmode="decimal" data-bind="comercial.desconto_percentual" data-num placeholder="0">
         </label>
-        <label class="field span-3">
+        <label class="field span-2">
           <span>Nome para "Outro material"</span>
           <input type="text" data-bind="comercial.outro_material_nome" placeholder="Ex.: Madeira (usado no PDF e no PPT)">
+        </label>
+        <label class="field">
+          <span>Categoria do "Outro"</span>
+          <select data-bind="comercial.outro_categoria" id="outroCategoria"></select>
         </label>
       </div>
     </section>
@@ -236,7 +304,10 @@
         </button>
       </div>
 
-      <button class="link-btn" id="verMarcadores" type="button">Marcadores do modelo PowerPoint</button>
+      <div class="summary-links">
+        <button class="link-btn" id="salvarRegistro" type="button">Salvar no registro</button>
+        <button class="link-btn" id="verMarcadores" type="button">Marcadores do PowerPoint</button>
+      </div>
     </div>
   </aside>
 </main>
@@ -308,6 +379,45 @@
     <button class="btn btn-ghost" type="button" id="confazVoltar">Cancelar</button>
     <button class="btn btn-primary" type="button" id="confazAvancar">Avançar →</button>
   </footer>
+</dialog>
+
+<dialog class="modal wide" id="precosDialog" aria-labelledby="precosTitulo">
+  <div class="modal-head">
+    <div>
+      <h3 id="precosTitulo">Custo por tonelada · UF × categoria</h3>
+      <p class="modal-text" id="precosSub"></p>
+    </div>
+    <button class="icon-btn" type="button" data-close aria-label="Fechar">×</button>
+  </div>
+  <div class="dist-wrap price-grid-wrap">
+    <table class="dist price-grid" id="precosGrid"></table>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-ghost btn-sm" type="button" id="restaurarPrecos">Restaurar tabela padrão</button>
+    <button class="btn btn-primary btn-sm" type="button" data-close>Concluir</button>
+  </div>
+</dialog>
+
+<dialog class="modal wide" id="registroDialog" aria-labelledby="registroTitulo">
+  <div class="modal-head">
+    <div>
+      <h3 id="registroTitulo">Registro de propostas</h3>
+      <p class="modal-text">Toda proposta com PDF ou PPT gerado entra aqui. Atualize o status e o valor negociado; a planilha <code>dados/registro_propostas.xlsx</code> acompanha.</p>
+    </div>
+    <button class="icon-btn" type="button" data-close aria-label="Fechar">×</button>
+  </div>
+  <div class="reg-kpis" id="registroKpis"></div>
+  <div class="reg-filtros">
+    <input type="search" id="registroBusca" placeholder="Buscar cliente, CNPJ, nº ou responsável">
+    <select id="registroStatus"><option value="">Todos os status</option></select>
+    <a class="btn btn-dark btn-sm" href="/relatorio-propostas.xlsx" id="baixarRelatorio">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12"/></svg>
+      Baixar relatório Excel
+    </a>
+  </div>
+  <div class="dist-wrap reg-wrap">
+    <table class="dist reg-table" id="registroTabela"></table>
+  </div>
 </dialog>
 
 <script>window.APP_CONFIG = {{ config|tojson }};</script>

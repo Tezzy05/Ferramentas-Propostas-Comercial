@@ -15,6 +15,7 @@ from servicos.planilha import MODEL_PATH, generate_excel, import_excel
 from servicos.proposta_pdf import gerar_pdf
 from servicos.proposta_ppt import PPT_MODEL_PATH, gerar_ppt, listar_marcadores, montar_valores
 from servicos.regras import contexto
+from servicos import registro
 
 app = Flask(__name__)
 
@@ -41,7 +42,18 @@ def proposta_do_request():
     parametros = load_parametros()
     ctx = contexto()
     proposta = validar_proposta(payload, ctx, parametros)
-    return proposta, calcular(proposta, ctx), parametros, ctx
+    return payload, proposta, calcular(proposta, ctx), parametros, ctx
+
+
+def registrar(response, payload, proposta, calc):
+    """Salva a proposta no registro ao gerar PDF/PPT; uma falha aqui não bloqueia o download."""
+    try:
+        _, aviso = registro.salvar(payload, proposta, calc)
+        response.headers["X-Registro"] = "aviso" if aviso else "ok"
+    except Exception:
+        app.logger.exception("Erro ao salvar a proposta no registro.")
+        response.headers["X-Registro"] = "erro"
+    return response
 
 
 def nome_arquivo(prefixo, proposta, extensao):
@@ -64,7 +76,11 @@ def index():
                 "confaz": {str(a): t for a, t in ctx["confaz"].items()},
                 "materiais": MATERIAIS,
                 "estados": ESTADOS,
-                "precos": [parametros["precos_por_tonelada"].get(m, 0) for m in MATERIAIS],
+                "confaz_origem": {str(a): o for a, o in ctx["confaz_origem"].items()},
+                "precos": ctx["precos"],
+                "dre": ctx["dre"],
+                "forma_pagamento": parametros["proposta"].get("forma_pagamento", ""),
+                "status": registro.STATUS,
                 "validade_dias": parametros["proposta"]["validade_dias"],
                 "numero_sugerido": gerar_numero(parametros),
                 "hoje": date.today().isoformat(),
@@ -84,7 +100,8 @@ def gerar_excel_route():
         payload = request.get_json(silent=True) or {}
         ctx = contexto()
         volumes = volumes_para_planilha(validar_declaracao(payload, ctx), ctx)
-        return send_file(generate_excel(volumes), as_attachment=True,
+        metas = {ano: r["minimo"] / 100 for ano, r in ctx["regras"].items()}
+        return send_file(generate_excel(volumes, metas), as_attachment=True,
                          download_name=EXCEL_FILENAME, mimetype=MIME_XLSX)
     except (ValueError, FileNotFoundError) as exc:
         return erro(str(exc))
@@ -110,14 +127,14 @@ def importar_excel_route():
 @app.route("/atualizar-proposta", methods=["POST"])
 def atualizar_proposta_route():
     try:
-        proposta, calc, parametros, ctx = proposta_do_request()
+        payload, proposta, calc, parametros, ctx = proposta_do_request()
         valores = montar_valores(proposta, calc, parametros, ctx)
         arquivo, pendentes = gerar_ppt(valores)
         response = send_file(arquivo, as_attachment=True, mimetype=MIME_PPTX,
                              download_name=nome_arquivo("Proposta_Comercial", proposta, "pptx"))
         if pendentes:
             response.headers["X-Marcadores-Pendentes"] = ",".join(pendentes)
-        return response
+        return registrar(response, payload, proposta, calc)
     except (ValueError, FileNotFoundError) as exc:
         return erro(str(exc))
     except Exception:
@@ -128,15 +145,71 @@ def atualizar_proposta_route():
 @app.route("/gerar-pdf", methods=["POST"])
 def gerar_pdf_route():
     try:
-        proposta, calc, parametros, _ = proposta_do_request()
-        return send_file(gerar_pdf(proposta, calc, parametros), as_attachment=True,
-                         mimetype="application/pdf",
-                         download_name=nome_arquivo("Proposta_Tecnica", proposta, "pdf"))
+        payload, proposta, calc, parametros, _ = proposta_do_request()
+        response = send_file(gerar_pdf(proposta, calc, parametros), as_attachment=True,
+                             mimetype="application/pdf",
+                             download_name=nome_arquivo("Proposta_Tecnica", proposta, "pdf"))
+        return registrar(response, payload, proposta, calc)
     except ValueError as exc:
         return erro(str(exc))
     except Exception:
         app.logger.exception("Erro inesperado ao gerar o PDF.")
         return erro("Ocorreu um erro inesperado ao gerar o PDF.", 500)
+
+
+# ---------- registro de propostas ----------
+
+@app.route("/propostas", methods=["GET"])
+def listar_propostas_route():
+    return jsonify({"sucesso": True, "propostas": registro.listar()})
+
+
+@app.route("/propostas", methods=["POST"])
+def salvar_proposta_route():
+    try:
+        payload, proposta, calc, _, _ = proposta_do_request()
+        dados, aviso = registro.salvar(payload, proposta, calc)
+        return jsonify({"sucesso": True, "numero": dados["numero"], "aviso": aviso})
+    except ValueError as exc:
+        return erro(str(exc))
+    except Exception:
+        app.logger.exception("Erro inesperado ao salvar a proposta.")
+        return erro("Ocorreu um erro inesperado ao salvar a proposta.", 500)
+
+
+@app.route("/propostas/<path:numero>", methods=["GET"])
+def obter_proposta_route(numero):
+    try:
+        return jsonify({"sucesso": True, "proposta": registro.obter(numero)})
+    except FileNotFoundError as exc:
+        return erro(str(exc), 404)
+
+
+@app.route("/propostas/<path:numero>", methods=["PATCH"])
+def atualizar_registro_route(numero):
+    try:
+        dados, aviso = registro.atualizar_registro(numero, request.get_json(silent=True) or {})
+        return jsonify({"sucesso": True, "registro": dados["registro"], "aviso": aviso})
+    except FileNotFoundError as exc:
+        return erro(str(exc), 404)
+    except ValueError as exc:
+        return erro(str(exc))
+
+
+@app.route("/propostas/<path:numero>", methods=["DELETE"])
+def excluir_proposta_route(numero):
+    try:
+        aviso = registro.excluir(numero)
+        return jsonify({"sucesso": True, "aviso": aviso})
+    except FileNotFoundError as exc:
+        return erro(str(exc), 404)
+
+
+@app.route("/relatorio-propostas.xlsx")
+def relatorio_route():
+    nome = f"Registro_propostas_{date.today():%Y-%m-%d}.xlsx"
+    return send_file(registro.gerar_relatorio(), as_attachment=True, download_name=nome,
+                     mimetype=MIME_XLSX)
 
 
 if __name__ == "__main__":
@@ -146,6 +219,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"Modelo Excel: {MODEL_PATH}")
     print(f"Modelo PPT:   {PPT_MODEL_PATH}{'' if PPT_MODEL_PATH.exists() else '  (não encontrado)'}")
+    print(f"Registro:     {registro.PLANILHA_PATH}")
     print(f"Acesse: {url}")
     print("Para encerrar: CTRL+C")
     print("=" * 60)

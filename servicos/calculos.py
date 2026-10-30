@@ -7,15 +7,21 @@ Cada ano-base é informado em um de dois modos:
 - "nacional": toneladas totais por material, distribuídas entre as UFs pela
   Metodologia CONFAZ (participação de cada UF, config/confaz.json).
 
-Percentual aplicado à UF = maior entre a recuperação contratada pelo cliente
-e a meta mínima da UF no ano.
+Percentual aplicado à UF = ajuste da UF, se houver; senão o maior entre a
+recuperação nacional contratada e a meta mínima da UF no ano.
 Massa a compensar = massa declarada × percentual aplicado.
-Valor             = massa a compensar × preço por tonelada do material.
+Preço (sobre a massa a compensar total da proposta, soma de todos os anos):
+- até 5 t: plano fechado com preço por tonelada da faixa;
+- acima de 5 t: preço de venda por tonelada com DRE (custo por UF × categoria,
+  impostos, mão de obra e margem); o preço vem do comercial (ou da referência)
+  ou é recalculado a partir da margem informada. Ver servicos/precificacao.py.
 """
 from datetime import date, datetime, timedelta
 import math
 import re
 import unicodedata
+
+from .precificacao import custo_direto, dre_resultado, plano_para, preco_para_margem, valor_plano
 
 MATERIAIS = [
     "PAPEL/PAPELÃO", "PLÁSTICO", "VIDRO", "AÇO/FERRO", "ALUMÍNIO",
@@ -133,18 +139,32 @@ def validar_declaracao(payload, ctx):
     recuperacao_payload = payload.get("recuperacao") or {}
     recuperacao = {}
     for year in set(volumes) | set(nacional):
-        minimo = ctx["regras"][year]["minimo"]
+        regra = ctx["regras"][year]
         bruto = recuperacao_payload.get(str(year))
-        pct = minimo if bruto in (None, "") else normalize_number(bruto, f"Recuperação {year}")
-        if pct > 100:
-            raise ValueError(f"Recuperação {year}: o percentual não pode passar de 100%.")
-        if pct + 1e-9 < minimo:
-            raise ValueError(
-                f"Recuperação {year}: o mínimo para o ano-base é {fmt_pct(minimo / 100)}."
-            )
-        recuperacao[year] = pct / 100
+        if not isinstance(bruto, dict):
+            bruto = {"nacional": bruto}
+        pct = _pct_recuperacao(bruto.get("nacional"), regra["minimo"], f"Recuperação {year}")
+        ajustes = {}
+        for uf, valor in (bruto.get("estados") or {}).items():
+            uf = str(uf).strip().upper()
+            if uf not in ESTADOS:
+                raise ValueError(f'Recuperação {year}: UF inválida "{uf}".')
+            if valor in (None, ""):
+                continue
+            minimo_uf = regra["excecoes"].get(uf, regra["minimo"])
+            ajustes[uf] = _pct_recuperacao(valor, minimo_uf, f"Recuperação {year}/{uf}")
+        recuperacao[year] = {"nacional": pct, "estados": ajustes}
 
     return {"volumes": volumes, "nacional": nacional, "recuperacao": recuperacao}
+
+
+def _pct_recuperacao(bruto, minimo, rotulo):
+    pct = minimo if bruto in (None, "") else normalize_number(bruto, rotulo)
+    if pct > 100:
+        raise ValueError(f"{rotulo}: o percentual não pode passar de 100%.")
+    if pct + 1e-9 < minimo:
+        raise ValueError(f"{rotulo}: o mínimo é {fmt_pct(minimo / 100)}.")
+    return pct / 100
 
 
 def distribuir_nacional(totais, tabela):
@@ -169,11 +189,6 @@ def volumes_para_planilha(declaracao, ctx):
     """Volumes por UF de todos os anos, prontos para a planilha de autodeclaração."""
     resultado = {}
     for year in sorted(set(declaracao["volumes"]) | set(declaracao["nacional"]), reverse=True):
-        if year not in ctx["anos_planilha"]:
-            raise ValueError(
-                f"A planilha modelo não tem a guia {year}. Inclua a guia no modelo "
-                "para gerar a autodeclaração deste ano-base."
-            )
         estados, distribuido = estados_do_ano(declaracao, ctx, year)
         if not distribuido:
             raise ValueError(
@@ -186,8 +201,13 @@ def volumes_para_planilha(declaracao, ctx):
 
 
 def percentual_uf(regra, recuperacao, uf):
-    """Percentual aplicado à UF (fração): o maior entre o contratado e a meta mínima da UF."""
-    return max(recuperacao, regra["excecoes"].get(uf, regra["minimo"]) / 100)
+    """
+    Percentual aplicado à UF (fração): o ajuste feito para a UF ou, sem ajuste,
+    o maior entre a recuperação nacional contratada e a meta mínima da UF.
+    """
+    if uf in recuperacao["estados"]:
+        return recuperacao["estados"][uf]
+    return max(recuperacao["nacional"], regra["excecoes"].get(uf, regra["minimo"]) / 100)
 
 
 def validar_proposta(payload, ctx, parametros):
@@ -213,14 +233,59 @@ def validar_proposta(payload, ctx, parametros):
         "validade": data_proposta + timedelta(days=validade_dias),
         "responsavel": _texto(proposta_raw.get("responsavel")),
         "email_responsavel": _texto(proposta_raw.get("email_responsavel")),
+        "telefone_responsavel": _texto(proposta_raw.get("telefone_responsavel"), 40),
+        "forma_pagamento": _texto(proposta_raw.get("forma_pagamento"), 300)
+        or parametros["proposta"].get("forma_pagamento", ""),
         "observacoes": _texto(proposta_raw.get("observacoes"), 2000),
     }
 
     comercial_raw = payload.get("comercial") or {}
-    precos_raw = comercial_raw.get("precos") or []
-    if not isinstance(precos_raw, list) or len(precos_raw) != len(MATERIAIS):
-        raise ValueError(f"São esperados {len(MATERIAIS)} preços por tonelada.")
-    precos = [normalize_number(v, f"Preço - {MATERIAIS[i]}") for i, v in enumerate(precos_raw)]
+    precos_cfg = ctx["precos"]
+    categorias = precos_cfg["categorias"]
+
+    tabela = {uf: list(v) for uf, v in precos_cfg["tabela"].items()}
+    editados = []
+    for uf, valores in (comercial_raw.get("precos_uf") or {}).items():
+        uf = str(uf).strip().upper()
+        if uf not in ESTADOS or not isinstance(valores, list) or len(valores) != len(categorias):
+            raise ValueError(f"Tabela de custos: dados inválidos para a UF {uf}.")
+        for i, valor in enumerate(valores):
+            if valor in (None, ""):
+                continue
+            preco = normalize_number(valor, f"Custo {uf}/{categorias[i].title()}")
+            if abs(preco - tabela[uf][i]) > 1e-9:
+                editados.append(f"{uf}/{categorias[i].title()}")
+            tabela[uf][i] = preco
+
+    planos = [dict(p) for p in precos_cfg["planos"]]
+    planos_raw = comercial_raw.get("planos") or []
+    if planos_raw:
+        if not isinstance(planos_raw, list) or len(planos_raw) != len(planos):
+            raise ValueError(f"São esperados {len(planos)} preços de plano.")
+        for plano, valor in zip(planos, planos_raw):
+            if valor not in (None, ""):
+                plano["preco_t"] = normalize_number(valor, f'Plano até {fmt_num(plano["ate_t"], 0)} t')
+
+    dre = ctx["dre"]
+    classe = _texto(comercial_raw.get("classe_mo"), 2).upper() or dre["classe_padrao"]
+    if classe not in dre["mao_de_obra_por_t"]:
+        raise ValueError(f"Classe de mão de obra inválida: {classe}.")
+    modo_preco = comercial_raw.get("modo_preco") or "preco"
+    if modo_preco not in ("preco", "margem"):
+        raise ValueError(f"Modo de preço inválido: {modo_preco}.")
+    bruto = comercial_raw.get("margem")
+    margem = None if bruto in (None, "") else normalize_number(bruto, "Margem") / 100
+    if margem is not None and margem >= 1:
+        raise ValueError("Margem: o percentual precisa ser menor que 100%.")
+    bruto = comercial_raw.get("preco_t")
+    preco_t = None if bruto in (None, "") else normalize_number(bruto, "Preço por tonelada")
+
+    categoria_material = list(precos_cfg["categoria_material"])
+    outro_categoria = _texto(comercial_raw.get("outro_categoria"), 20).upper()
+    if outro_categoria:
+        if outro_categoria not in categorias:
+            raise ValueError(f'Categoria inválida para "Outro material": {outro_categoria}.')
+        categoria_material[-1] = outro_categoria
 
     desconto = normalize_number(comercial_raw.get("desconto_percentual"), "Desconto")
     if desconto > 100:
@@ -235,7 +300,17 @@ def validar_proposta(payload, ctx, parametros):
         "cliente": cliente,
         "proposta": proposta,
         "declaracao": declaracao,
-        "precos": precos,
+        "tabela_precos": tabela,
+        "precos_editados": editados,
+        "planos": planos,
+        "faixa_cheia": precos_cfg["faixa_cheia"],
+        "classe_mo": classe,
+        "modo_preco": modo_preco,
+        "margem": margem,
+        "preco_t": preco_t,
+        "categorias": categorias,
+        "categoria_material": categoria_material,
+        "vigencia_precos": precos_cfg["vigencia"],
         "desconto": desconto / 100,
         "materiais": nomes,
     }
@@ -247,75 +322,114 @@ def gerar_numero(parametros, hoje=None):
 
 
 def calcular(proposta, ctx):
-    """Monta todos os números usados no PDF e no PPT."""
-    declaracao, precos, nomes = proposta["declaracao"], proposta["precos"], proposta["materiais"]
+    """Monta todos os números usados no PDF, no PPT e no registro de propostas."""
+    declaracao, nomes = proposta["declaracao"], proposta["materiais"]
+    tabela, categorias = proposta["tabela_precos"], proposta["categorias"]
+    cat_idx = [categorias.index(c) for c in proposta["categoria_material"]]
+    media = [sum(tabela[uf][j] for uf in ESTADOS) / len(ESTADOS) for j in range(len(categorias))]
     anos = sorted(set(declaracao["volumes"]) | set(declaracao["nacional"]), reverse=True)
+    n = len(MATERIAIS)
 
+    # 1) Massas por ano, UF e material; linhas de custo para a DRE.
     por_ano = []
-    acumulado = [{"material": nomes[i], "declarado": 0.0, "compensar": 0.0,
-                  "preco": precos[i], "valor": 0.0} for i in range(len(MATERIAIS))]
-    estados_total = {}
-
+    linhas_custo = []
     for year in anos:
         regra = ctx["regras"][year]
-        contratada = declaracao["recuperacao"][year]
+        rec = declaracao["recuperacao"][year]
         estados, distribuido = estados_do_ano(declaracao, ctx, year)
 
-        declarado = [0.0] * len(MATERIAIS)
-        compensar = [0.0] * len(MATERIAIS)
+        declarado, compensar = [0.0] * n, [0.0] * n
         linhas_uf = []
         if distribuido:
             for uf in ESTADOS:
                 if uf not in estados:
                     continue
                 vals = estados[uf]
-                pct = percentual_uf(regra, contratada, uf)
+                pct = percentual_uf(regra, rec, uf)
+                linha = {"uf": uf, "percentual": pct, "declarado": 0.0, "compensar": 0.0, "valor": 0.0}
                 for i, v in enumerate(vals):
+                    comp = v * pct
                     declarado[i] += v
-                    compensar[i] += v * pct
-                linha = {
-                    "uf": uf, "percentual": pct, "declarado": sum(vals),
-                    "compensar": sum(vals) * pct,
-                    "valor": sum(v * pct * precos[i] for i, v in enumerate(vals)),
-                }
+                    compensar[i] += comp
+                    linha["declarado"] += v
+                    linha["compensar"] += comp
+                    if comp:
+                        linhas_custo.append((tabela[uf][cat_idx[i]], cat_idx[i], comp))
                 linhas_uf.append(linha)
-                total_uf = estados_total.setdefault(
-                    uf, {"uf": uf, "declarado": 0.0, "compensar": 0.0, "valor": 0.0})
-                for chave in ("declarado", "compensar", "valor"):
-                    total_uf[chave] += linha[chave]
         else:
-            # Nacional sem tabela CONFAZ: percentual geral sobre o total.
-            pct = max(contratada, regra["minimo"] / 100)
+            # Nacional sem tabela CONFAZ: percentual geral e custo médio nacional da categoria.
+            pct = max(rec["nacional"], regra["minimo"] / 100)
             declarado = list(declaracao["nacional"][year])
             compensar = [v * pct for v in declarado]
+            linhas_custo += [(media[cat_idx[i]], cat_idx[i], c) for i, c in enumerate(compensar) if c]
 
-        materiais = []
-        for i in range(len(MATERIAIS)):
-            valor = compensar[i] * precos[i]
-            materiais.append({"material": nomes[i], "declarado": declarado[i],
-                              "compensar": compensar[i], "preco": precos[i], "valor": valor})
-            acumulado[i]["declarado"] += declarado[i]
-            acumulado[i]["compensar"] += compensar[i]
-            acumulado[i]["valor"] += valor
-
-        total_declarado = sum(declarado)
-        total_compensar = sum(compensar)
+        total_declarado, total_compensar = sum(declarado), sum(compensar)
         por_ano.append({
             "ano": year,
             "modo": "nacional" if year in declaracao["nacional"] else "estados",
             "distribuido": distribuido,
+            "confaz_origem": ctx.get("confaz_origem", {}).get(year),
             "regra": regra,
-            "recuperacao": contratada,
+            "recuperacao": rec["nacional"],
+            "ajustes_uf": rec["estados"],
             "percentual_efetivo": total_compensar / total_declarado if total_declarado else 0,
-            "materiais": [m for m in materiais if m["declarado"] > 0],
+            "declarado_mat": declarado,
+            "compensar_mat": compensar,
             "estados": linhas_uf,
             "declarado": total_declarado,
             "compensar": total_compensar,
-            "valor": sum(m["valor"] for m in materiais),
         })
 
-    subtotal = sum(m["valor"] for m in acumulado)
+    # 2) Preço sobre a massa total: plano até 5 t, DRE acima.
+    total_t = sum(a["compensar"] for a in por_ano)
+    dre_cfg = ctx["dre"]
+    custos = custo_direto(linhas_custo, categorias, dre_cfg)
+    plano = plano_para(total_t, proposta["planos"])
+    if plano:
+        regime = "plano"
+        subtotal = valor_plano(total_t, plano, proposta["faixa_cheia"])
+        preco_t = plano["preco_t"]
+    else:
+        regime = "dre"
+        if proposta["modo_preco"] == "margem" and proposta["margem"] is not None:
+            # Margem informada: recalcula o preço para a margem final (já com desconto).
+            preco_t = preco_para_margem(custos, proposta["classe_mo"], dre_cfg,
+                                        proposta["margem"], proposta["desconto"])
+        else:
+            preco_t = proposta["preco_t"] if proposta["preco_t"] is not None else dre_cfg["preco_referencia_t"]
+        subtotal = total_t * preco_t
+    fator = subtotal / total_t if total_t else 0.0   # R$ por tonelada efetivamente cobrado
+
+    # 3) Rateio do valor por ano, material e UF (proporcional à massa a compensar).
+    acumulado = [{"material": nomes[i], "categoria": proposta["categoria_material"][i],
+                  "declarado": 0.0, "compensar": 0.0, "valor": 0.0} for i in range(n)]
+    estados_total = {}
+    for ano in por_ano:
+        ano["materiais"] = []
+        for i in range(n):
+            dec, comp = ano["declarado_mat"][i], ano["compensar_mat"][i]
+            if dec > 0:
+                ano["materiais"].append({
+                    "material": nomes[i], "categoria": proposta["categoria_material"][i],
+                    "declarado": dec, "compensar": comp, "valor": comp * fator, "preco": fator,
+                })
+            acumulado[i]["declarado"] += dec
+            acumulado[i]["compensar"] += comp
+            acumulado[i]["valor"] += comp * fator
+        for linha in ano["estados"]:
+            linha["valor"] = linha["compensar"] * fator
+            total_uf = estados_total.setdefault(
+                linha["uf"], {"uf": linha["uf"], "declarado": 0.0, "compensar": 0.0, "valor": 0.0})
+            for chave in ("declarado", "compensar", "valor"):
+                total_uf[chave] += linha[chave]
+        ano["valor"] = ano["compensar"] * fator
+        del ano["declarado_mat"], ano["compensar_mat"]
+
+    for m in acumulado:
+        m["preco"] = fator if m["compensar"] else 0.0
+
     desconto_valor = subtotal * proposta["desconto"]
+    total = subtotal - desconto_valor
 
     return {
         "por_ano": por_ano,
@@ -325,13 +439,19 @@ def calcular(proposta, ctx):
         "anos_estados": [a["ano"] for a in por_ano if a["modo"] == "estados"],
         "anos_nacional": [a["ano"] for a in por_ano if a["modo"] == "nacional"],
         "declarado": sum(m["declarado"] for m in acumulado),
-        "compensar": sum(m["compensar"] for m in acumulado),
+        "compensar": total_t,
+        "regime": regime,
+        "plano": plano,
+        "preco_t": preco_t,
+        "preco_efetivo": fator,
+        "modo_preco": proposta["modo_preco"],
         "subtotal": subtotal,
         "desconto_percentual": proposta["desconto"],
         "desconto_valor": desconto_valor,
-        "total": subtotal - desconto_valor,
-        "materiais_sem_preco": [m["material"] for m in acumulado
-                                if m["declarado"] > 0 and m["preco"] == 0],
+        "total": total,
+        "dre": dre_resultado(total, custos, proposta["classe_mo"], dre_cfg),
+        "margem_alvo": dre_cfg["margem_alvo"],
+        "precos_editados": proposta["precos_editados"],
     }
 
 

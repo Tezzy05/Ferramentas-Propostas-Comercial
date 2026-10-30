@@ -7,18 +7,12 @@
   "proposta": {
     "prefixo_numero": "AMB",
     "validade_dias": 30,
-    "condicoes": "Valores expressos em reais (R$). Massa a compensar calculada sobre o volume autodeclarado pelo cliente e a meta de compensação de cada ano. Pagamento e prazos conforme proposta comercial."
+    "condicoes": "Valores expressos em reais (R$). Massa a compensar calculada sobre o volume autodeclarado pelo cliente e o percentual de recuperação de cada UF no ano-base.",
+    "forma_pagamento": "30 dias após o aceite desta proposta."
   },
-  "precos_por_tonelada": {
-    "PAPEL/PAPELÃO": 0,
-    "PLÁSTICO": 0,
-    "VIDRO": 0,
-    "AÇO/FERRO": 0,
-    "ALUMÍNIO": 0,
-    "LONGA VIDA": 0,
-    "ISOPOR": 0,
-    "BOPP": 0,
-    "AEROSSOL": 0,
-    "OUTRO MATERIAL": 0
+  "contato_padrao": {
+    "email": "thuise.matsumura@ambipar.com",
+    "telefone": "+55 11 99810-8922",
+    "_comentario": "Usado no último slide do PPT quando o responsável não informar e-mail/telefone."
   }
 }

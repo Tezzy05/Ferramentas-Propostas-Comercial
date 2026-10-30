@@ -12,3 +12,6 @@ Thumbs.db
 .claude/.skipper-*
 .skipper/*
 !.skipper/receipts/
+
+# Registro local de propostas (dados de clientes) - nunca versionar
+dados/

@@ -10,13 +10,16 @@ nele (ex.: "INSERIR RAZÃO SOCIAL", a linha "Compensação ... ano base ...", a
 forma de pagamento e o contato do último slide) são reconhecidos e trocados
 pelos marcadores automaticamente (TEXTOS_PADRAO).
 """
+from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
+import math
 import re
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
+from pptx.util import Emu, Inches
 
 from .calculos import fmt_data, fmt_moeda, fmt_num, fmt_pct, juntar, texto_escopo
 from .ooxml_strict import converter, eh_strict
@@ -287,7 +290,54 @@ def _iter_text_frames(shapes):
                     yield cell.text_frame
 
 
-def gerar_ppt(valores, tabela=None):
+FORMA_PAGAMENTO = re.compile(r"forma\s+de\s+pagamento", re.I)
+LINHA_OBS = Inches(0.21)          # altura aproximada de uma linha de 11 pt com espaçamento
+CARACTERES_POR_POLEGADA = 13      # ~11 pt Neo Sans
+
+
+def _inserir_observacoes(prs, observacoes):
+    """
+    Coloca as observações da proposta logo abaixo da linha "Forma de pagamento",
+    com a mesma formatação. A caixa de texto do modelo cresce para baixo e já
+    encosta no rodapé, então ela sobe o necessário, sem passar da tabela acima.
+    """
+    linhas = [linha.strip() for linha in observacoes.splitlines() if linha.strip()]
+    if not linhas:
+        return False
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if not getattr(shape, "has_text_frame", False) or not shape.has_text_frame:
+                continue
+            paragrafos = shape.text_frame.paragraphs
+            alvo = next((p for p in paragrafos if FORMA_PAGAMENTO.search(p.text)), None)
+            if alvo is None or not alvo.runs:
+                continue
+
+            anterior = alvo._p
+            for k, linha in enumerate(linhas):
+                novo = deepcopy(alvo._p)
+                runs = novo.findall(qn("a:r"))
+                for extra in runs[1:]:
+                    novo.remove(extra)
+                for quebra in novo.findall(qn("a:br")):
+                    novo.remove(quebra)
+                runs[0].find(qn("a:t")).text = (f"*Observações: {linha}" if k == 0 else linha)
+                anterior.addnext(novo)
+                anterior = novo
+
+            # Sobe a caixa o quanto as linhas novas ocupam, sem invadir a tabela.
+            largura = Emu(shape.width).inches
+            n_linhas = sum(math.ceil(len(l) / max(largura * CARACTERES_POR_POLEGADA, 1)) for l in linhas)
+            limite = max((s.top + s.height for s in slide.shapes
+                          if getattr(s, "has_table", False) and s.has_table and s.top < shape.top),
+                         default=0) + Inches(0.15)
+            subir = min(n_linhas * LINHA_OBS, max(shape.top - limite, 0))
+            shape.top = shape.top - int(subir)
+            return True
+    return False
+
+
+def gerar_ppt(valores, tabela=None, observacoes=""):
     if not PPT_MODEL_PATH.exists():
         raise FileNotFoundError(
             "Modelo da proposta não encontrado. Salve o PowerPoint com os marcadores "
@@ -301,6 +351,8 @@ def gerar_ppt(valores, tabela=None):
     prs = Presentation(BytesIO(conteudo))
     if tabela:
         inserir_tabela(prs, tabela)
+    # Se o modelo já tiver o marcador {{OBSERVACOES}}, as observações vão só para ele.
+    modelo_texto = " ".join(tf.text for slide in prs.slides for tf in _iter_text_frames(slide.shapes))
     pendentes = set()
     for slide in prs.slides:
         contato = _slide_de_contato(slide)
@@ -312,6 +364,9 @@ def gerar_ppt(valores, tabela=None):
                 if marcado:
                     _encolher_se_cresceu(paragraph, tamanho_original)
                 _tirar_destaques(paragraph)
+
+    if observacoes and "{{OBSERVACOES}}" not in modelo_texto:
+        _inserir_observacoes(prs, observacoes)
 
     output = BytesIO()
     prs.save(output)

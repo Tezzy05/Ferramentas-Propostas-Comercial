@@ -90,7 +90,6 @@
       },
       comercial: {
         precos_uf: {},                       // {UF: [papel, plástico, vidro, metal]} só o que foi editado
-        planos: PLANOS.map(() => ""),        // R$/t editado de cada plano ("" = padrão)
         classe_mo: DRE.classe_padrao,
         modo_preco: "preco",                 // "preco": comercial define o preço; "margem": define a margem
         preco_t: "",                         // preço de venda acima de 5 t ("" = referência)
@@ -130,8 +129,7 @@
       else s.comercial.precos_uf[uf] = vals.map((v) => (v === null || v === undefined ? "" : String(v)));
     }
     delete s.comercial.pacotes;
-    if (!Array.isArray(s.comercial.planos) || s.comercial.planos.length !== PLANOS.length) s.comercial.planos = padrao.comercial.planos;
-    s.comercial.planos = s.comercial.planos.map((v) => (v === null || v === undefined ? "" : String(v)));
+    delete s.comercial.planos;  // planos até 5 t agora têm preço fixo
     if (!CLASSES.includes(s.comercial.classe_mo)) s.comercial.classe_mo = DRE.classe_padrao;
     delete s.comercial.margem_alvo;
     ["preco_t", "margem"].forEach((k) => { s.comercial[k] = s.comercial[k] === null || s.comercial[k] === undefined ? padrao.comercial[k] : String(s.comercial[k]); });
@@ -250,12 +248,7 @@
   }
   const precoUF = (uf, j) => precoEditado(uf, j) ?? precoPadrao(uf, j);
   const mediaCategoria = (j) => soma(ESTADOS.map((uf) => precoUF(uf, j))) / ESTADOS.length;
-  function planos() {
-    return PLANOS.map((p, k) => {
-      const v = num(S.comercial.planos[k]);
-      return { ate_t: p.ate_t, preco_t: S.comercial.planos[k] !== "" && Number.isFinite(v) && v >= 0 ? v : p.preco_t };
-    });
-  }
+  const planos = () => PLANOS;  // preços fixos; ajuste só pelo desconto
   const planoPara = (t) => (t > 0 ? planos().find((p) => t <= p.ate_t + 1e-9) || null : null);
   const valorPlano = (t, p) => (CFG.precos.faixa_cheia ? p.ate_t : t) * p.preco_t;
 
@@ -985,35 +978,14 @@
   }
 
   function montarPlanos() {
-    $("#planos").innerHTML = PLANOS.map((p, k) => `<div class="pack ${S.comercial.planos[k] !== "" ? "edited" : ""}" data-pack="${k}">
+    $("#planos").innerHTML = PLANOS.map((p, k) => `<div class="pack" data-pack="${k}">
       <span>Até ${fmt(p.ate_t, 0)} t</span>
-      <label class="money"><span>R$/t</span><input type="text" inputmode="decimal" data-plano="${k}" value="${fmt(planos()[k].preco_t, 2)}" aria-label="Plano até ${p.ate_t} t (R$ por tonelada)"></label>
+      <strong class="pack-preco">${money(p.preco_t)}<em>/t</em></strong>
       <small data-plano-total="${k}"></small>
     </div>`).join("");
     $("#classeMo").innerHTML = CLASSES.map((c) => `<button type="button" role="radio" data-classe="${c}">${c}<small>${money(DRE.mao_de_obra_por_t[c])}/t</small></button>`).join("");
   }
 
-  $("#planos").addEventListener("input", (e) => {
-    const inp = e.target.closest("[data-plano]");
-    if (!inp) return;
-    const k = +inp.dataset.plano;
-    const v = num(inp.value);
-    const ok = Number.isFinite(v) && v >= 0;
-    inp.closest(".money").style.boxShadow = ok ? "" : "inset 0 0 0 1.5px var(--danger)";
-    S.comercial.planos[k] = ok && Math.abs(v - PLANOS[k].preco_t) < 1e-9 ? "" : inp.value;
-    inp.closest(".pack").classList.toggle("edited", S.comercial.planos[k] !== "");
-    atualizarTudo({ grade: false });
-  });
-  $("#planos").addEventListener("focusout", (e) => {
-    const inp = e.target.closest("[data-plano]");
-    if (inp && Number.isFinite(num(inp.value))) inp.value = fmt(num(inp.value), 2);
-  });
-  $("#restaurarPlanos").addEventListener("click", () => {
-    S.comercial.planos = PLANOS.map(() => "");
-    montarPlanos();
-    atualizarTudo({ grade: false });
-    toast("Preços dos planos restaurados.", "ok");
-  });
   $("#classeMo").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-classe]");
     if (!btn) return;
@@ -1274,8 +1246,8 @@
     if (provisorias.length) alertas.push(`${provisorias.join(", ")} usa a tabela CONFAZ de ${CFG.confaz_origem[provisorias[0]]} (a do ano ainda não foi validada).`);
     const semGuia = r.anos.filter((y) => !CFG.anos_planilha.map(String).includes(y));
     if (semGuia.length) alertas.push(`A planilha modelo não tem a guia ${semGuia.join(", ")}.`);
-    const editados = precosEditados().length + S.comercial.planos.filter((v) => v !== "").length;
-    if (editados) alertas.push(`${editados} valor(es) editado(s) nesta proposta (custos ou planos).`);
+    const editados = precosEditados().length;
+    if (editados) alertas.push(`${editados} custo(s) por tonelada editado(s) nesta proposta.`);
     if (r.anos.length && r.regime === "dre" && r.dre.margem < 0) alertas.push(`Contrato com prejuízo: margem da DRE de ${pct(r.dre.margem * 100)}.`);
     else if (r.anos.length && r.regime === "dre" && r.dre.margem < margemAlvo() - 1e-9) alertas.push(`Margem do contrato (${pct(r.dre.margem * 100)}) abaixo da referência de ${pct(margemAlvo() * 100)}.`);
     if ($$("#gridBody input.bad").length) alertas.push(`Há células com valor inválido em ${S.anoAtivo}; elas não entram no cálculo.`);
@@ -1324,7 +1296,6 @@
       proposta: S.proposta,
       comercial: {
         precos_uf,
-        planos: S.comercial.planos,
         classe_mo: S.comercial.classe_mo,
         modo_preco: S.comercial.modo_preco,
         margem: S.comercial.margem,

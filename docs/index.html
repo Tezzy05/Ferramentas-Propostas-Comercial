@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Propostas Comerciais · Ambipar (demonstração)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="static/css/app.css">
+<script>
+  // Esconde os painéis até a animação de entrada; volta ao normal se o JS falhar.
+  document.documentElement.classList.add("js-anim");
+  setTimeout(() => document.documentElement.classList.remove("js-anim"), 2500);
+</script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#cliente">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">ambipar</span>
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-product">Propostas</span>
+    </a>
+    <nav class="steps" aria-label="Etapas">
+      <a href="#cliente" class="step-pill" data-step="cliente"><span>1</span>Cliente</a>
+      <a href="#volumes" class="step-pill" data-step="volumes"><span>2</span>Volumes</a>
+      <a href="#precos" class="step-pill" data-step="precos"><span>3</span>Preços</a>
+    </nav>
+    <div class="topbar-actions">
+      <span class="save-state" id="saveState">Rascunho salvo neste navegador</span>
+      <button class="btn btn-ghost btn-sm" id="abrirRegistro" type="button">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4h12v12H4zM4 8h12M8 8v8"/></svg>
+        Propostas
+      </button>
+      <button class="btn btn-outline btn-sm" id="novaProposta" type="button">Nova proposta</button>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <div class="workspace">
+
+    <section class="panel reveal" id="cliente">
+      <div class="panel-head">
+        <span class="panel-index">01</span>
+        <div>
+          <h2>Cliente e proposta</h2>
+          <p>Dados que vão para o cabeçalho do PDF e para os marcadores do PowerPoint.</p>
+        </div>
+      </div>
+
+      <div class="fields">
+        <label class="field span-2">
+          <span>Razão social <em>*</em></span>
+          <input type="text" data-bind="cliente.razao_social" placeholder="Nome da empresa cliente" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>CNPJ</span>
+          <input type="text" data-bind="cliente.cnpj" data-mask="cnpj" placeholder="00.000.000/0000-00" inputmode="numeric">
+        </label>
+        <label class="field">
+          <span>Cidade / UF</span>
+          <input type="text" data-bind="cliente.cidade_uf" placeholder="São Paulo / SP">
+        </label>
+        <label class="field">
+          <span>Contato</span>
+          <input type="text" data-bind="cliente.contato" placeholder="Nome de quem recebe a proposta">
+        </label>
+        <label class="field">
+          <span>E-mail do contato</span>
+          <input type="email" data-bind="cliente.email" placeholder="contato@cliente.com.br">
+        </label>
+        <label class="field">
+          <span>Telefone</span>
+          <input type="tel" data-bind="cliente.telefone" placeholder="(11) 90000-0000">
+        </label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="fields fields-4">
+        <label class="field">
+          <span>Nº da proposta</span>
+          <input type="text" data-bind="proposta.numero">
+        </label>
+        <label class="field">
+          <span>Data</span>
+          <input type="date" data-bind="proposta.data">
+        </label>
+        <label class="field">
+          <span>Validade (dias)</span>
+          <input type="text" inputmode="numeric" data-bind="proposta.validade_dias">
+        </label>
+        <label class="field">
+          <span>Válida até</span>
+          <input type="text" id="validadeAte" readonly tabindex="-1">
+        </label>
+        <label class="field span-2">
+          <span>Responsável comercial</span>
+          <input type="text" data-bind="proposta.responsavel" placeholder="Seu nome">
+        </label>
+        <label class="field">
+          <span>E-mail do responsável</span>
+          <input type="email" data-bind="proposta.email_responsavel" placeholder="voce@ambipar.com">
+        </label>
+        <label class="field">
+          <span>Telefone do responsável</span>
+          <input type="tel" data-bind="proposta.telefone_responsavel" placeholder="+55 11 90000-0000">
+        </label>
+        <label class="field span-4">
+          <span>Forma de pagamento</span>
+          <input type="text" data-bind="proposta.forma_pagamento">
+        </label>
+        <label class="field span-4">
+          <span>Observações da proposta</span>
+          <textarea rows="2" data-bind="proposta.observacoes" placeholder="Opcional: condições específicas, prazos, premissas…"></textarea>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel reveal" id="volumes">
+      <div class="panel-head">
+        <span class="panel-index">02</span>
+        <div>
+          <h2>Volumes declarados</h2>
+          <p>Toneladas colocadas no mercado em cada ano-base, sem o conteúdo do produto. Por estado ou nacional (Metodologia CONFAZ).</p>
+        </div>
+      </div>
+
+      <div class="year-bar">
+        <div class="segmented" id="yearTabs" role="tablist" aria-label="Ano-base"></div>
+        <button class="btn btn-dark btn-sm" id="abrirConfaz" type="button">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 10h14M10 3c2.2 2 3.3 4.4 3.3 7s-1.1 5-3.3 7M10 3c-2.2 2-3.3 4.4-3.3 7s1.1 5 3.3 7"/><circle cx="10" cy="10" r="7"/></svg>
+          Metodologia CONFAZ
+        </button>
+      </div>
+
+      <div class="mode-bar">
+        <div class="segmented segmented-sm" id="modoTabs" role="tablist" aria-label="Modo de compensação">
+          <button type="button" data-modo="estados">Por estados</button>
+          <button type="button" data-modo="nacional">Nacional · CONFAZ</button>
+        </div>
+        <div class="year-meta" id="yearMeta"></div>
+      </div>
+      <p class="rule-note" id="regraAno"></p>
+
+      <div id="modoEstados">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <label class="btn btn-ghost btn-sm file-btn">
+              <input type="file" id="importFile" accept=".xlsx">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12"/></svg>
+              Importar planilha
+            </label>
+            <button class="btn btn-ghost btn-sm" id="limparAno" type="button">Limpar ano</button>
+            <label class="switch">
+              <input type="checkbox" id="soPreenchidos">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              Só estados preenchidos
+            </label>
+          </div>
+          <span class="hint">Cole direto do Excel com <kbd>Ctrl</kbd>+<kbd>V</kbd> · <kbd>Enter</kbd> desce uma linha</span>
+        </div>
+
+        <div class="grid-wrap" id="gridWrap">
+          <table class="grid" id="grid">
+            <thead id="gridHead"></thead>
+            <tbody id="gridBody"></tbody>
+            <tfoot id="gridFoot"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div id="modoNacional" hidden></div>
+    </section>
+
+    <section class="panel reveal" id="precos">
+      <div class="panel-head">
+        <span class="panel-index">03</span>
+        <div>
+          <h2>Recuperação e preços</h2>
+          <p>Recuperação nacional vale para todos os estados; ajuste estados individualmente quando preciso.</p>
+        </div>
+      </div>
+
+      <h3 class="sub">Recuperação por ano-base</h3>
+      <div class="recuperacao" id="recuperacao"></div>
+
+      <h3 class="sub">Preço</h3>
+      <div class="regime" id="regime"></div>
+
+      <div class="pack-card" id="cardPlanos">
+        <div class="price-card-head">
+          <div>
+            <b>Planos até 5 t <span class="tag-ativo" data-ativo="plano">Em uso</span></b>
+            <span>Preço fixo pela massa a compensar total da proposta (soma de todos os anos): massa × R$/t da faixa. Para negociar, use o desconto.</span>
+          </div>
+        </div>
+        <div class="packs" id="planos"></div>
+      </div>
+
+      <div class="pack-card dre-card" id="cardDre">
+        <div class="price-card-head">
+          <div>
+            <b>Cálculo DRE <span class="tag-ativo" data-ativo="dre">Em uso</span></b>
+            <span>Preço de venda por tonelada com custos da tabela por UF, impostos, mão de obra e margem.</span>
+          </div>
+        </div>
+        <div class="dre-ctl">
+          <div class="field">
+            <span>Mão de obra</span>
+            <div class="segmented segmented-sm" id="classeMo" role="radiogroup" aria-label="Classe de mão de obra"></div>
+          </div>
+          <label class="field">
+            <span>Preço de venda (R$/t)</span>
+            <input type="text" inputmode="decimal" id="precoVenda" autocomplete="off">
+          </label>
+          <label class="field">
+            <span>Margem do contrato (%)</span>
+            <input type="text" inputmode="decimal" id="margemContrato" autocomplete="off">
+          </label>
+          <button class="btn btn-ghost btn-sm" type="button" id="usarReferencia">Preço de referência</button>
+        </div>
+        <p class="dre-modo" id="dreModo"></p>
+        <div class="cenarios" id="cenarios"></div>
+        <div class="dre" id="dre"></div>
+      </div>
+
+      <div class="price-card">
+        <div class="price-card-head">
+          <div>
+            <b>Custo por tonelada · UF × categoria</b>
+            <span id="precoVigencia"></span>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="abrirPrecos" type="button">Ver / editar tabela</button>
+        </div>
+        <div class="cat-avg" id="catMedias"></div>
+      </div>
+
+      <div class="fields fields-4 price-extras">
+        <label class="field">
+          <span>Desconto (R$)</span>
+          <input type="text" inputmode="decimal" id="descontoValor" placeholder="0,00" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Desconto (%)</span>
+          <input type="text" inputmode="decimal" id="descontoPct" placeholder="0" autocomplete="off">
+        </label>
+      </div>
+
+      <div class="year-values" id="valoresAno"></div>
+    </section>
+
+    <footer class="foot">
+      AMBIPAR ENVIRONMENT RESIDENTIAL COLLECTION S.A · CNPJ 10.652.751/0001-46
+    </footer>
+  </div>
+
+  <aside class="summary reveal" aria-label="Resumo da proposta">
+    <div class="summary-card">
+      <div class="summary-top">
+        <span class="tag tag-lime" id="sumNumero">—</span>
+        <h3 id="sumCliente">Cliente não informado</h3>
+      </div>
+
+      <div class="summary-total">
+        <span>Valor total</span>
+        <strong id="sumTotal">R$ 0,00</strong>
+        <small id="sumDesconto"></small>
+      </div>
+
+      <dl class="summary-stats">
+        <div><dt>Declarado</dt><dd id="sumDeclarado">0 t</dd></div>
+        <div><dt>A compensar</dt><dd id="sumCompensar">0 t</dd></div>
+        <div><dt>Estados</dt><dd id="sumEstados">0</dd></div>
+        <div><dt>Anos</dt><dd id="sumAnos">—</dd></div>
+      </dl>
+
+      <div class="summary-bars" id="sumBars"></div>
+
+      <ul class="alerts" id="alerts"></ul>
+
+      <div class="actions">
+        <button class="action" id="btnExcel" type="button">
+          <span class="action-icon">XLS</span>
+          <span class="action-text"><b>Gerar planilha</b><small>Autodeclaração no modelo oficial</small></span>
+        </button>
+        <button class="action" id="btnPpt" type="button">
+          <span class="action-icon">PPT</span>
+          <span class="action-text"><b>Atualizar proposta</b><small>Proposta comercial com os dados</small></span>
+        </button>
+        <button class="action action-primary" id="btnPdf" type="button">
+          <span class="action-icon">PDF</span>
+          <span class="action-text"><b>Gerar PDF da proposta</b><small>A mesma apresentação, em PDF</small></span>
+        </button>
+      </div>
+
+      <div class="summary-links">
+        <button class="link-btn" id="salvarRegistro" type="button">Salvar no registro</button>
+        <button class="link-btn" id="verMarcadores" type="button">Marcadores do PowerPoint</button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<dialog class="modal" id="marcadoresDialog">
+  <div class="modal-head">
+    <h3>Marcadores do PowerPoint</h3>
+    <button class="icon-btn" type="button" data-close aria-label="Fechar">×</button>
+  </div>
+  <p class="modal-text" id="modeloStatus"></p>
+  <div class="marcadores" id="marcadoresList"></div>
+</dialog>
+
+<dialog class="modal wizard" id="confazDialog" aria-labelledby="confazTitulo">
+  <header class="wizard-head">
+    <span class="wizard-icon" aria-hidden="true">
+      <svg viewBox="0 0 20 20"><path d="M3 10h14M10 3c2.2 2 3.3 4.4 3.3 7s-1.1 5-3.3 7M10 3c-2.2 2-3.3 4.4-3.3 7s1.1 5 3.3 7"/><circle cx="10" cy="10" r="7"/></svg>
+    </span>
+    <div>
+      <h3 id="confazTitulo">Metodologia CONFAZ</h3>
+      <p>Compensação nacional: massa total por material, distribuída entre as UFs</p>
+    </div>
+    <button class="icon-btn" type="button" data-close aria-label="Fechar">×</button>
+  </header>
+
+  <ol class="wizard-steps" id="wizardSteps">
+    <li data-wstep="1"><span>1</span><b>Ano-base</b><small>Selecione o ano</small></li>
+    <li data-wstep="2"><span>2</span><b>Materiais</b><small>Informe as toneladas</small></li>
+    <li data-wstep="3"><span>3</span><b>Confirmação</b><small>Revise e finalize</small></li>
+  </ol>
+
+  <div class="wizard-body">
+    <section data-wpane="1">
+      <div class="wizard-intro">
+        <h4>Selecione o ano-base</h4>
+        <p>Ano em que as embalagens foram colocadas no mercado.</p>
+      </div>
+      <div class="year-cards" id="confazAnos"></div>
+    </section>
+
+    <section data-wpane="2" hidden>
+      <div class="wizard-intro">
+        <h4>Informe as toneladas de cada material</h4>
+        <p>Ano-base selecionado: <b id="confazAnoSel">—</b> · use vírgula para decimais (100,500 = 100 t e 500 kg).</p>
+      </div>
+      <div class="material-cards" id="confazMateriais"></div>
+      <div class="rec-box">
+        <div class="rec-head">
+          <b>Recuperação contratada</b>
+          <label class="pct-input"><input type="text" inputmode="decimal" id="confazRec" aria-label="Recuperação contratada (%)">%</label>
+        </div>
+        <input type="range" id="confazRecRange" min="0" max="100" step="0.1" aria-label="Recuperação contratada">
+        <small id="confazRegra"></small>
+      </div>
+    </section>
+
+    <section data-wpane="3" hidden>
+      <div class="wizard-intro">
+        <h4>Revise a compensação nacional</h4>
+        <p id="confazResumoSub"></p>
+      </div>
+      <div id="confazResumo"></div>
+    </section>
+  </div>
+
+  <footer class="wizard-foot">
+    <button class="btn btn-ghost" type="button" id="confazVoltar">Cancelar</button>
+    <button class="btn btn-primary" type="button" id="confazAvancar">Avançar →</button>
+  </footer>
+</dialog>
+
+<dialog class="modal wide" id="precosDialog" aria-labelledby="precosTitulo">
+  <div class="modal-head">
+    <div>
+      <h3 id="precosTitulo">Custo por tonelada · UF × categoria</h3>
+      <p class="modal-text" id="precosSub"></p>
+    </div>
+    <button class="icon-btn" type="button" data-close aria-label="Fechar">×</button>
+  </div>
+  <div class="dist-wrap price-grid-wrap">
+    <table class="dist price-grid" id="precosGrid"></table>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-ghost btn-sm" type="button" id="restaurarPrecos">Restaurar tabela padrão</button>
+    <button class="btn btn-primary btn-sm" type="button" data-close>Concluir</button>
+  </div>
+</dialog>
+
+<dialog class="modal wide" id="registroDialog" aria-labelledby="registroTitulo">
+  <div class="modal-head">
+    <div>
+      <h3 id="registroTitulo">Registro de propostas</h3>
+      <p class="modal-text">Toda proposta com PDF ou PPT gerado entra aqui. Atualize o status e o valor negociado; a planilha <code>dados/registro_propostas.xlsx</code> acompanha.</p>
+    </div>
+    <button class="icon-btn" type="button" data-close aria-label="Fechar">×</button>
+  </div>
+  <div class="reg-kpis" id="registroKpis"></div>
+  <div class="reg-filtros">
+    <input type="search" id="registroBusca" placeholder="Buscar cliente, CNPJ, nº ou responsável">
+    <select id="registroStatus"><option value="">Todos os status</option></select>
+    <a class="btn btn-dark btn-sm" href="/relatorio-propostas.xlsx" id="baixarRelatorio">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12"/></svg>
+      Baixar relatório Excel
+    </a>
+  </div>
+  <div class="dist-wrap reg-wrap">
+    <table class="dist reg-table" id="registroTabela"></table>
+  </div>
+</dialog>
+
+<script>window.APP_CONFIG = {"anos": [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018], "anos_nacional": [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026], "anos_planilha": [2025, 2024, 2023, 2022, 2021, 2020, 2019], "confaz": {"2018": {"AC": 0.263407, "AL": 0.792628, "AM": 1.821583, "AP": 0.231954, "BA": 5.184972, "CE": 2.306368, "DF": 1.695539, "ES": 2.064009, "GO": 3.202822, "MA": 1.368614, "MG": 10.175597, "MS": 1.920679, "MT": 2.763756, "PA": 2.392063, "PB": 1.075025, "PE": 3.080262, "PI": 0.893807, "PR": 6.581776, "RJ": 8.121004, "RN": 1.076809, "RO": 0.913845, "RR": 0.180254, "RS": 6.861729, "SC": 4.295228, "SE": 0.675577, "SP": 29.494441, "TO": 0.566249}, "2019": {"AC": 0.248917, "AL": 0.784647, "AM": 1.879823, "AP": 0.224525, "BA": 5.153755, "CE": 2.451065, "DF": 1.634667, "ES": 2.169574, "GO": 3.268339, "MA": 1.438652, "MG": 10.20882, "MS": 1.952848, "MT": 2.849668, "PA": 2.566418, "PB": 1.066692, "PE": 3.269271, "PI": 0.854189, "PR": 6.445542, "RJ": 7.62767, "RN": 1.021007, "RO": 0.953942, "RR": 0.239875, "RS": 6.618141, "SC": 4.550883, "SE": 0.650244, "SP": 29.306343, "TO": 0.564482}, "2020": {"AC": 0.239212, "AL": 0.80482, "AM": 1.998758, "AP": 0.229086, "BA": 4.967922, "CE": 2.350697, "DF": 1.677949, "ES": 2.242235, "GO": 3.06194, "MA": 1.463016, "MG": 10.141458, "MS": 2.161, "MT": 3.119734, "PA": 2.814416, "PB": 1.086141, "PE": 3.17804, "PI": 0.876375, "PR": 6.376055, "RJ": 7.79896, "RN": 1.020957, "RO": 0.999091, "RR": 0.253556, "RS": 6.615625, "SC": 4.425201, "SE": 0.63312, "SP": 28.85545, "TO": 0.609187}, "2021": {"AC": 0.254312, "AL": 0.809859, "AM": 1.975975, "AP": 0.195057, "BA": 4.725563, "CE": 2.707, "DF": 1.493815, "ES": 2.307002, "GO": 3.55338, "MA": 1.497605, "MG": 10.258949, "MS": 2.097208, "MT": 2.815966, "PA": 2.560798, "PB": 1.253801, "PE": 3.608008, "PI": 0.867079, "PR": 5.908669, "RJ": 7.857717, "RN": 1.037807, "RO": 0.952771, "RR": 0.235321, "RS": 6.922899, "SC": 4.493747, "SE": 0.64532, "SP": 28.345116, "TO": 0.619258}, "2022": {"AC": 0.259482, "AL": 0.842424, "AM": 2.018724, "AP": 0.19597, "BA": 4.884953, "CE": 2.483328, "DF": 1.463237, "ES": 2.399778, "GO": 3.511604, "MA": 1.664003, "MG": 10.236688, "MS": 2.212607, "MT": 2.851787, "PA": 2.891558, "PB": 1.113245, "PE": 3.190264, "PI": 0.836213, "PR": 6.121608, "RJ": 6.508262, "RN": 1.041575, "RO": 0.862718, "RR": 0.231149, "RS": 6.261424, "SC": 4.983802, "SE": 0.664789, "SP": 29.619534, "TO": 0.649274}, "2023": {"AC": 0.27, "AL": 0.97, "AM": 2.03, "AP": 0.2, "BA": 5.01, "CE": 2.44, "DF": 1.43, "ES": 2.55, "GO": 3.51, "MA": 1.56, "MG": 10.29, "MS": 2.35, "MT": 2.98, "PA": 2.97, "PB": 1.15, "PE": 3.16, "PI": 0.96, "PR": 6.39, "RJ": 6.3, "RN": 1.18, "RO": 0.84, "RR": 0.24, "RS": 6.4, "SC": 5.17, "SE": 0.72, "SP": 28.21, "TO": 0.72}, "2024": {"AC": 0.244994, "AL": 0.900643, "AM": 1.941179, "AP": 0.252127, "BA": 5.032675, "CE": 2.250152, "DF": 1.451525, "ES": 2.461281, "GO": 3.674253, "MA": 1.457158, "MG": 10.375352, "MS": 2.284673, "MT": 2.923285, "PA": 3.289432, "PB": 1.06643, "PE": 2.940925, "PI": 0.924419, "PR": 6.62254, "RJ": 6.654004, "RN": 1.0508, "RO": 0.988742, "RR": 0.276384, "RS": 6.127752, "SC": 5.122877, "SE": 0.666698, "SP": 28.330491, "TO": 0.689211}, "2025": {"AC": 0.261784, "AL": 1.068863, "AM": 2.008046, "AP": 0.200223, "BA": 4.868223, "CE": 2.541047, "DF": 1.490888, "ES": 2.696189, "GO": 3.615572, "MA": 1.84881, "MG": 10.252942, "MS": 2.087258, "MT": 3.080911, "PA": 2.968415, "PB": 1.251352, "PE": 3.361372, "PI": 1.004085, "PR": 6.340661, "RJ": 6.602601, "RN": 1.100017, "RO": 0.946398, "RR": 0.246648, "RS": 6.370614, "SC": 4.036686, "SE": 0.724651, "SP": 28.267353, "TO": 0.758391}, "2026": {"AC": 0.261784, "AL": 1.068863, "AM": 2.008046, "AP": 0.200223, "BA": 4.868223, "CE": 2.541047, "DF": 1.490888, "ES": 2.696189, "GO": 3.615572, "MA": 1.84881, "MG": 10.252942, "MS": 2.087258, "MT": 3.080911, "PA": 2.968415, "PB": 1.251352, "PE": 3.361372, "PI": 1.004085, "PR": 6.340661, "RJ": 6.602601, "RN": 1.100017, "RO": 0.946398, "RR": 0.246648, "RS": 6.370614, "SC": 4.036686, "SE": 0.724651, "SP": 28.267353, "TO": 0.758391}}, "confaz_origem": {"2018": 2018, "2019": 2019, "2020": 2020, "2021": 2021, "2022": 2022, "2023": 2023, "2024": 2024, "2025": 2025, "2026": 2025}, "dre": {"_comentario": "Par\u00e2metros da DRE usada na precifica\u00e7\u00e3o acima de 5 t (fonte: DRE_Exemplo.xlsx). Custos sobre a massa a compensar por UF e categoria. O contrato come\u00e7a no \u0027preco_referencia_t\u0027 (VALOR/TON da planilha) e mostra a margem; ao informar uma margem, o pre\u00e7o \u00e9 recalculado para atingi-la. \u0027margem_alvo\u0027 \u00e9 a refer\u00eancia visual no painel.", "auditoria_por_t": 1.3, "beneficios": 0, "cenarios_margem": [0.1, 0.15, 0.2, 0.25], "classe_padrao": "C", "cofins": 0.076, "comissao_pct": 0.01, "coop_pct": 0.55, "csll": 0.09, "custodia_por_t": {"METAL": 1.32, "PAPEL": 1.32, "PL\u00c1STICO": 1.32, "VIDRO": 1.5}, "ir": 0.15, "ir_adicional": 0.1, "ir_adicional_limite": 240000, "mao_de_obra_por_t": {"A": 11.43, "B": 7.43, "C": 5.0}, "margem_alvo": 0.15, "pis": 0.0165, "preco_referencia_t": 130, "rec_pct": 0.45, "subtrair_ir_adicional": false, "taxa_rec": 0.2}, "estados": ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"], "forma_pagamento": "30 dias ap\u00f3s o aceite desta proposta.", "hoje": "2026-10-31", "marcadores": [{"descricao": "Raz\u00e3o social do cliente", "marcador": "{{CLIENTE}}"}, {"descricao": "CNPJ do cliente", "marcador": "{{CNPJ}}"}, {"descricao": "Nome do contato no cliente", "marcador": "{{CONTATO}}"}, {"descricao": "E-mail do contato", "marcador": "{{EMAIL_CLIENTE}}"}, {"descricao": "Telefone do contato", "marcador": "{{TELEFONE}}"}, {"descricao": "Cidade/UF do cliente", "marcador": "{{CIDADE_UF}}"}, {"descricao": "N\u00famero da proposta", "marcador": "{{NUMERO_PROPOSTA}}"}, {"descricao": "Data da proposta (dd/mm/aaaa)", "marcador": "{{DATA_PROPOSTA}}"}, {"descricao": "Data de validade (dd/mm/aaaa)", "marcador": "{{VALIDADE}}"}, {"descricao": "Validade em dias", "marcador": "{{VALIDADE_DIAS}}"}, {"descricao": "Validade por extenso, ex.: 30 (trinta)", "marcador": "{{VALIDADE_EXTENSO}}"}, {"descricao": "Respons\u00e1vel comercial", "marcador": "{{RESPONSAVEL}}"}, {"descricao": "E-mail do respons\u00e1vel comercial", "marcador": "{{EMAIL_RESPONSAVEL}}"}, {"descricao": "Telefone do respons\u00e1vel comercial", "marcador": "{{TELEFONE_RESPONSAVEL}}"}, {"descricao": "Forma de pagamento, ex.: 30 dias ap\u00f3s o aceite desta proposta.", "marcador": "{{FORMA_PAGAMENTO}}"}, {"descricao": "Pre\u00e7o por tonelada compensada (R$)", "marcador": "{{PRECO_TONELADA}}"}, {"descricao": "Plano at\u00e9 5 t (ex.: Plano at\u00e9 3 t) ou c\u00e1lculo por tonelada", "marcador": "{{PLANO}}"}, {"descricao": "Ex.: Compensa\u00e7\u00e3o SP e MS ano base 2019 e 2020 e nacional ano base 2024 e 2025", "marcador": "{{ESCOPO}}"}, {"descricao": "Texto legal das metas m\u00ednimas dos anos da proposta", "marcador": "{{TEXTO_METAS}}"}, {"descricao": "Recupera\u00e7\u00e3o contratada por ano (ex.: 2025: 40%; 2024: 32%)", "marcador": "{{RECUPERACAO}}"}, {"descricao": "Anos de compensa\u00e7\u00e3o (ex.: 2025, 2024)", "marcador": "{{ANOS}}"}, {"descricao": "Quantidade de anos", "marcador": "{{QTD_ANOS}}"}, {"descricao": "UFs com volume declarado", "marcador": "{{ESTADOS}}"}, {"descricao": "Quantidade de UFs", "marcador": "{{QTD_ESTADOS}}"}, {"descricao": "Materiais com volume declarado", "marcador": "{{MATERIAIS}}"}, {"descricao": "Massa total declarada (t)", "marcador": "{{VOLUME_DECLARADO}}"}, {"descricao": "Massa total a compensar (t)", "marcador": "{{VOLUME_COMPENSAR}}"}, {"descricao": "Valor antes do desconto (R$)", "marcador": "{{SUBTOTAL}}"}, {"descricao": "Desconto (%)", "marcador": "{{DESCONTO_PERCENTUAL}}"}, {"descricao": "Desconto (R$)", "marcador": "{{DESCONTO}}"}, {"descricao": "Valor total da proposta (R$)", "marcador": "{{VALOR_TOTAL}}"}, {"descricao": "Observa\u00e7\u00f5es da proposta", "marcador": "{{OBSERVACOES}}"}, {"descricao": "Raz\u00e3o social da Ambipar", "marcador": "{{EMPRESA}}"}, {"descricao": "CNPJ da Ambipar", "marcador": "{{CNPJ_EMPRESA}}"}, {"descricao": "Regra m\u00ednima do ano (troque o ano)", "marcador": "{{META_2026}}"}, {"descricao": "Recupera\u00e7\u00e3o contratada no ano", "marcador": "{{RECUPERACAO_2026}}"}, {"descricao": "Massa declarada no ano (t)", "marcador": "{{VOLUME_2026}}"}, {"descricao": "Massa a compensar no ano (t)", "marcador": "{{COMPENSAR_2026}}"}, {"descricao": "Valor do ano (R$)", "marcador": "{{VALOR_2026}}"}], "materiais": ["PAPEL/PAPEL\u00c3O", "PL\u00c1STICO", "VIDRO", "A\u00c7O/FERRO", "ALUM\u00cdNIO", "LONGA VIDA", "ISOPOR", "BOPP", "AEROSSOL", "OUTRO MATERIAL"], "modelo_ppt": true, "numero_sugerido": "AMB-20261031-0137", "precos": {"categoria_material": ["PAPEL", "PL\u00c1STICO", "VIDRO", "METAL", "METAL", "PAPEL", "PL\u00c1STICO", "PL\u00c1STICO", "METAL", "PL\u00c1STICO"], "categorias": ["PAPEL", "PL\u00c1STICO", "VIDRO", "METAL"], "faixa_cheia": false, "planos": [{"ate_t": 1.0, "preco_t": 950.0}, {"ate_t": 2.0, "preco_t": 900.0}, {"ate_t": 3.0, "preco_t": 800.0}, {"ate_t": 4.0, "preco_t": 750.0}, {"ate_t": 5.0, "preco_t": 740.0}], "tabela": {"AC": [70.0, 120.0, 100.0, 60.0], "AL": [60.0, 100.0, 100.0, 60.0], "AM": [60.0, 130.0, 180.0, 60.0], "AP": [70.0, 120.0, 150.0, 60.0], "BA": [60.0, 100.0, 100.0, 60.0], "CE": [60.0, 100.0, 90.0, 60.0], "DF": [65.0, 120.0, 160.0, 60.0], "ES": [70.0, 100.0, 200.0, 60.0], "GO": [65.0, 200.0, 250.0, 60.0], "MA": [75.0, 150.0, 200.0, 60.0], "MG": [70.0, 120.0, 210.0, 60.0], "MS": [65.0, 150.0, 600.0, 60.0], "MT": [78.0, 100.0, 120.0, 60.0], "PA": [70.0, 70.0, 130.0, 60.0], "PB": [60.0, 120.0, 200.0, 60.0], "PE": [70.0, 110.0, 100.0, 60.0], "PI": [60.0, 130.0, 200.0, 60.0], "PR": [60.0, 100.0, 60.0, 60.0], "RJ": [70.0, 80.0, 85.0, 60.0], "RN": [60.0, 80.0, 100.0, 60.0], "RO": [70.0, 80.0, 100.0, 60.0], "RR": [70.0, 80.0, 100.0, 60.0], "RS": [60.0, 100.0, 130.0, 60.0], "SC": [80.0, 100.0, 170.0, 60.0], "SE": [60.0, 130.0, 180.0, 60.0], "SP": [70.0, 100.0, 90.0, 60.0], "TO": [60.0, 150.0, 180.0, 60.0]}, "vigencia": "abril/2026"}, "regras": {"2018": {"excecoes": {}, "minimo": 22.0, "origem": "padrao", "resumo": "22% para todos os estados.", "texto": ""}, "2019": {"excecoes": {}, "minimo": 22.0, "origem": "planilha", "resumo": "22% para todos os estados.", "texto": ""}, "2020": {"excecoes": {}, "minimo": 22.0, "origem": "planilha", "resumo": "22% para todos os estados.", "texto": ""}, "2021": {"excecoes": {}, "minimo": 22.0, "origem": "regra", "resumo": "22% para todos os estados.", "texto": "Ano-base 2021: o volume a recuperar deve ser de, no m\u00ednimo, 22% do total circulante."}, "2022": {"excecoes": {}, "minimo": 22.0, "origem": "planilha", "resumo": "22% para todos os estados.", "texto": ""}, "2023": {"excecoes": {}, "minimo": 22.0, "origem": "planilha", "resumo": "22% para todos os estados.", "texto": ""}, "2024": {"excecoes": {}, "minimo": 30.0, "origem": "regra", "resumo": "30% para todos os estados.", "texto": "Ano-base 2024: percentual m\u00ednimo de compensa\u00e7\u00e3o de 30% da massa declarada."}, "2025": {"excecoes": {"MG": 32.5, "MT": 35.0, "SP": 33.0}, "minimo": 32.0, "origem": "regra", "resumo": "32% para todos os estados, exceto SP (33%), MT (35%) e MG (32,5%).", "texto": "A meta m\u00ednima para a comprova\u00e7\u00e3o da log\u00edstica reversa \u00e9 de 32% para todos os estados brasileiros, conforme estabelecido pelo Decreto Federal 12.688, de 21 de outubro de 2025, exceto em MT (35%), SP (33%) e MG (32,5%), de acordo com as metas estaduais estabelecidas."}, "2026": {"excecoes": {"MG": 35.0, "MT": 40.0, "SP": 34.0}, "minimo": 33.1, "origem": "regra", "resumo": "33,1% para todos os estados, exceto SP (34%), MT (40%) e MG (35%).", "texto": "Para o ano-base de 2026, a meta m\u00ednima para a comprova\u00e7\u00e3o da log\u00edstica reversa \u00e9 de 33,10% para todos os estados brasileiros, exceto em SP (34%), MT (40%) e MG (35%), de acordo com as metas estaduais estabelecidas."}}, "status": ["Em elabora\u00e7\u00e3o", "Enviada", "Em negocia\u00e7\u00e3o", "Ganha", "Perdida"], "validade_dias": 30};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js" defer></script>
+<script>window.DEMO = {"exemplos": {"excel": "exemplos/Autodeclaracao_exemplo.xlsx", "ppt": "exemplos/Proposta_Comercial_exemplo.pptx", "pdf": "exemplos/Proposta_Comercial_exemplo.pdf", "relatorio": "exemplos/Registro_propostas_exemplo.xlsx"}, "registro": [{"numero": "AMB-DEMO-102", "criada_em": "2026-10-31T01:37:39", "atualizada_em": "2026-10-31T01:37:39", "payload": {"cliente": {"razao_social": "Cosméticos Aurora Ltda", "cnpj": "08.552.310/0001-44", "contato": "", "email": "", "telefone": "", "cidade_uf": ""}, "proposta": {"numero": "AMB-DEMO-102", "data": "2026-10-19", "validade_dias": "30", "responsavel": "Thuíse Matsumura", "email_responsavel": "thuise.matsumura@ambipar.com", "telefone_responsavel": "", "forma_pagamento": "30 dias após o aceite desta proposta.", "observacoes": ""}, "comercial": {"precos_uf": {}, "classe_mo": "C", "modo_preco": "preco", "preco_t": "", "margem": "", "desconto_modo": "pct", "desconto_percentual": "", "desconto_valor": ""}, "anos": {}, "nacional": {"2025": [4, 3, 0, 0, 0, 1, 0, 0, 0, 0]}, "recuperacao": {}}, "resumo": {"cliente": "Cosméticos Aurora Ltda", "cnpj": "08.552.310/0001-44", "cidade_uf": "", "contato": "", "email": "", "telefone": "", "responsavel": "Thuíse Matsumura", "email_responsavel": "thuise.matsumura@ambipar.com", "data_proposta": "2026-10-19", "validade": "2026-11-18", "anos": [2025], "modos": ["Nacional (CONFAZ)"], "ufs": ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"], "declarado": 8.0, "compensar": 2.5941092456000003, "subtotal": 2075.28739648, "desconto_percentual": 0.0, "total": 2075.28739648, "regra_preco": "Plano até 3 t", "preco_t": 799.9999999999999, "classe_mo": "C", "custo_direto": 238.63564309109572, "resultado": 1216.239208410223, "margem": 0.5860582059492809}, "registro": {"status": "Em negociação", "valor_negociado": null, "data_venda": "", "observacao": ""}}, {"numero": "AMB-DEMO-103", "criada_em": "2026-10-31T01:37:39", "atualizada_em": "2026-10-31T01:37:39", "payload": {"cliente": {"razao_social": "Alimentos Vale Verde Ltda", "cnpj": "21.774.905/0001-63", "contato": "", "email": "", "telefone": "", "cidade_uf": ""}, "proposta": {"numero": "AMB-DEMO-103", "data": "2026-10-01", "validade_dias": "30", "responsavel": "Kathleen Mulsa", "email_responsavel": "kathleen.mulsa@ambipar.com", "telefone_responsavel": "", "forma_pagamento": "30 dias após o aceite desta proposta.", "observacoes": ""}, "comercial": {"precos_uf": {}, "classe_mo": "C", "modo_preco": "preco", "preco_t": "", "margem": "", "desconto_modo": "pct", "desconto_percentual": "", "desconto_valor": ""}, "anos": {"2023": {"SP": [40, 30, 12, 0, 0, 0, 0, 0, 0, 0], "MS": [10, 5, 0, 0, 0, 0, 0, 0, 0, 0]}}, "nacional": {"2024": [60, 35, 0, 8, 0, 0, 0, 0, 0, 0]}, "recuperacao": {}}, "resumo": {"cliente": "Alimentos Vale Verde Ltda", "cnpj": "21.774.905/0001-63", "cidade_uf": "", "contato": "", "email": "", "telefone": "", "responsavel": "Kathleen Mulsa", "email_responsavel": "kathleen.mulsa@ambipar.com", "data_proposta": "2026-10-01", "validade": "2026-10-31", "anos": [2024, 2023], "modos": ["Nacional (CONFAZ)", "Por estados"], "ufs": ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"], "declarado": 200.00000205999999, "compensar": 52.240000617999996, "subtotal": 6791.20008034, "desconto_percentual": 0.0, "total": 6791.20008034, "regra_preco": "DRE (acima de 5 t)", "preco_t": 130.0, "classe_mo": "C", "custo_direto": 4803.521049646767, "resultado": 704.1026937855547, "margem": 0.10367868498292043}, "registro": {"status": "Perdida", "valor_negociado": null, "data_venda": "", "observacao": "Cliente optou por outra entidade gestora."}}, {"numero": "AMB-DEMO-104", "criada_em": "2026-10-31T01:37:39", "atualizada_em": "2026-10-31T01:37:39", "payload": {"cliente": {"razao_social": "Higiene Lar Distribuidora", "cnpj": "33.640.118/0001-90", "contato": "", "email": "", "telefone": "", "cidade_uf": ""}, "proposta": {"numero": "AMB-DEMO-104", "data": "2026-10-26", "validade_dias": "30", "responsavel": "Thuíse Matsumura", "email_responsavel": "thuise.matsumura@ambipar.com", "telefone_responsavel": "", "forma_pagamento": "30 dias após o aceite desta proposta.", "observacoes": ""}, "comercial": {"precos_uf": {}, "classe_mo": "C", "modo_preco": "preco", "preco_t": "", "margem": "", "desconto_modo": "pct", "desconto_percentual": "5", "desconto_valor": ""}, "anos": {}, "nacional": {"2024": [70, 55, 0, 0, 0, 0, 0, 0, 0, 0], "2025": [80, 60, 15, 0, 0, 0, 0, 0, 0, 0]}, "recuperacao": {}}, "resumo": {"cliente": "Higiene Lar Distribuidora", "cnpj": "33.640.118/0001-90", "cidade_uf": "", "contato": "", "email": "", "telefone": "", "responsavel": "Thuíse Matsumura", "email_responsavel": "thuise.matsumura@ambipar.com", "data_proposta": "2026-10-26", "validade": "2026-11-25", "anos": [2025, 2024], "modos": ["Nacional (CONFAZ)"], "ufs": ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"], "declarado": 280.00000249999994, "compensar": 87.7608673835, "subtotal": 11408.912759855, "desconto_percentual": 0.05, "total": 10838.46712186225, "regra_preco": "DRE (acima de 5 t)", "preco_t": 130.0, "classe_mo": "C", "custo_direto": 8571.261429506883, "resultado": 413.94307938704, "margem": 0.0381920316528964}, "registro": {"status": "Enviada", "valor_negociado": null, "data_venda": "", "observacao": ""}}, {"numero": "AMB-DEMO-105", "criada_em": "2026-10-31T01:37:39", "atualizada_em": "2026-10-31T01:37:39", "payload": {"cliente": {"razao_social": "Pet Nutri Ltda", "cnpj": "17.209.442/0001-21", "contato": "", "email": "", "telefone": "", "cidade_uf": ""}, "proposta": {"numero": "AMB-DEMO-105", "data": "2026-10-13", "validade_dias": "30", "responsavel": "Kathleen Mulsa", "email_responsavel": "kathleen.mulsa@ambipar.com", "telefone_responsavel": "", "forma_pagamento": "30 dias após o aceite desta proposta.", "observacoes": ""}, "comercial": {"precos_uf": {}, "classe_mo": "C", "modo_preco": "preco", "preco_t": "", "margem": "", "desconto_modo": "pct", "desconto_percentual": "", "desconto_valor": ""}, "anos": {}, "nacional": {"2025": [2, 1, 0, 0, 0, 0, 0, 0, 0, 0]}, "recuperacao": {}}, "resumo": {"cliente": "Pet Nutri Ltda", "cnpj": "17.209.442/0001-21", "cidade_uf": "", "contato": "", "email": "", "telefone": "", "responsavel": "Kathleen Mulsa", "email_responsavel": "kathleen.mulsa@ambipar.com", "data_proposta": "2026-10-13", "validade": "2026-11-12", "anos": [2025], "modos": ["Nacional (CONFAZ)"], "ufs": ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"], "declarado": 3.0, "compensar": 0.9727909671000003, "subtotal": 924.1514187450003, "desconto_percentual": 0.0, "total": 924.1514187450003, "regra_preco": "Plano até 1 t", "preco_t": 950.0, "classe_mo": "C", "custo_direto": 87.73254602244464, "resultado": 556.6050295084189, "margem": 0.6022876968195209}, "registro": {"status": "Ganha", "valor_negociado": null, "data_venda": "2026-10-23", "observacao": ""}}, {"numero": "AMB-DEMO-101", "criada_em": "2026-10-31T01:37:39", "atualizada_em": "2026-10-31T01:37:39", "payload": {"cliente": {"razao_social": "Bebidas Horizonte S.A.", "cnpj": "45.118.230/0001-07", "contato": "", "email": "", "telefone": "", "cidade_uf": ""}, "proposta": {"numero": "AMB-DEMO-101", "data": "2026-10-07", "validade_dias": "30", "responsavel": "Kathleen Mulsa", "email_responsavel": "kathleen.mulsa@ambipar.com", "telefone_responsavel": "", "forma_pagamento": "30 dias após o aceite desta proposta.", "observacoes": ""}, "comercial": {"precos_uf": {}, "classe_mo": "C", "modo_preco": "preco", "preco_t": "160", "margem": "", "desconto_modo": "pct", "desconto_percentual": "", "desconto_valor": ""}, "anos": {}, "nacional": {"2025": [300, 420, 180, 90, 40, 60, 0, 0, 0, 0]}, "recuperacao": {}}, "resumo": {"cliente": "Bebidas Horizonte S.A.", "cnpj": "45.118.230/0001-07", "cidade_uf": "", "contato": "", "email": "", "telefone": "", "responsavel": "Kathleen Mulsa", "email_responsavel": "kathleen.mulsa@ambipar.com", "data_proposta": "2026-10-07", "validade": "2026-11-06", "anos": [2025], "modos": ["Nacional (CONFAZ)"], "ufs": ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"], "declarado": 1090.0, "compensar": 353.447384713, "subtotal": 56551.58155408, "desconto_percentual": 0.0, "total": 56551.58155408, "regra_preco": "DRE (acima de 5 t)", "preco_t": 160.0, "classe_mo": "C", "custo_direto": 36741.16466833091, "resultado": 8747.587910811688, "margem": 0.15468334696256747}, "registro": {"status": "Ganha", "valor_negociado": 54855.03, "data_venda": "2026-10-21", "observacao": ""}}]};</script>
+<script src="static/js/demo.js"></script>
+<script src="static/js/app.js" defer></script>
+</body>
+</html>

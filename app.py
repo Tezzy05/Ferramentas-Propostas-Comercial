@@ -130,7 +130,8 @@ def gerar_apresentacao():
     """Monta a proposta comercial (PPT) a partir do que veio do painel."""
     payload, proposta, calc, parametros, ctx = proposta_do_request()
     valores = montar_valores(proposta, calc, parametros, ctx)
-    arquivo, pendentes = gerar_ppt(valores, montar_tabela_resumo(proposta, calc))
+    arquivo, pendentes = gerar_ppt(valores, montar_tabela_resumo(proposta, calc),
+                                   proposta["proposta"]["observacoes"])
     return payload, proposta, calc, arquivo, pendentes
 
 

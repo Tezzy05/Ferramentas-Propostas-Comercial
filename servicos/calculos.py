@@ -257,14 +257,8 @@ def validar_proposta(payload, ctx, parametros):
                 editados.append(f"{uf}/{categorias[i].title()}")
             tabela[uf][i] = preco
 
+    # Preços dos planos até 5 t são fixos (config/precos_tonelada.json); ajuste só pelo desconto.
     planos = [dict(p) for p in precos_cfg["planos"]]
-    planos_raw = comercial_raw.get("planos") or []
-    if planos_raw:
-        if not isinstance(planos_raw, list) or len(planos_raw) != len(planos):
-            raise ValueError(f"São esperados {len(planos)} preços de plano.")
-        for plano, valor in zip(planos, planos_raw):
-            if valor not in (None, ""):
-                plano["preco_t"] = normalize_number(valor, f'Plano até {fmt_num(plano["ate_t"], 0)} t')
 
     dre = ctx["dre"]
     classe = _texto(comercial_raw.get("classe_mo"), 2).upper() or dre["classe_padrao"]

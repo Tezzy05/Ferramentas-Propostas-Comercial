@@ -28,7 +28,7 @@ ano-base → por estados ou nacional → toneladas por material → percentual d
    - recuperação **nacional** de cada ano (do mínimo legal até 100%): todos os estados seguem;
    - **Ajustar por estado**: muda UFs individualmente, cada uma limitada ao seu mínimo legal.
      Mudar o nacional depois refaz os ajustes (todos voltam a seguir o nacional);
-   - **preço**: planos até 5 t ou DRE acima de 5 t (veja abaixo), com a tabela de **custo por
+   - **preço**: planos até 5 t (preço fixo) ou DRE acima de 5 t (veja abaixo), com a tabela de **custo por
      tonelada por UF e categoria** (fixa, com "Ver / editar tabela" para mudar valores só naquela
      proposta);
    - desconto em R$ ou em % (preencher um calcula o outro); a tabela final mostra o rateio por
@@ -57,8 +57,8 @@ total             = valor pelo preço (abaixo) − desconto
 | até 5 t | massa × R$ 740/t |
 | acima de 5 t | massa × preço de venda por tonelada, conferido pela **DRE** |
 
-Os preços dos planos são editáveis em cada proposta (`cobrar_faixa_cheia: true` em
-`config/precos_tonelada.json` passaria a cobrar a faixa inteira). O valor é rateado entre anos,
+Os preços dos planos são fixos (`config/precos_tonelada.json`); para negociar, use o desconto
+em R$ ou % (`cobrar_faixa_cheia: true` passaria a cobrar a faixa inteira). O valor é rateado entre anos,
 materiais e UFs pela massa.
 
 **DRE** (`config/dre.json`, fonte `DRE_Exemplo.xlsx`): custo direto por UF × categoria (crédito
@@ -112,6 +112,10 @@ automaticamente, sem precisar editar marcadores:
 | 30 dias após o aceite desta proposta. | forma de pagamento do painel |
 | válida por 30 (trinta) dias | validade da proposta por extenso |
 | e-mail e telefone do slide "Obrigado" | contato do responsável comercial |
+
+As **observações da proposta** (campo do painel) entram logo abaixo da forma de pagamento,
+com a mesma fonte; a caixa de texto sobe o necessário para não invadir o rodapé. Em outro
+modelo, o marcador `{{OBSERVACOES}}` define onde elas aparecem.
 
 **Tabela do slide "Proposta Comercial"** ("Compensação Nacional – Meta Mínima"): no PPT
 oficial ela é uma planilha do Excel embutida, que o PowerPoint mostra por uma imagem e não se

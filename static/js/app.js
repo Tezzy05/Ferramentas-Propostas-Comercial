@@ -1580,6 +1580,18 @@
     toastTimer = setTimeout(() => el.classList.remove("show"), tipo === "warn" || tipo === "error" ? 7000 : 4000);
   }
 
+  // Resumo da proposta atual para o registro da versão de demonstração (static/js/demo.js).
+  window.__demoResumo = () => {
+    const r = calcular();
+    return {
+      cliente: S.cliente.razao_social, cnpj: S.cliente.cnpj, responsavel: S.proposta.responsavel,
+      data_proposta: S.proposta.data, anos: r.anos.map(Number),
+      declarado: r.totalDeclarado, compensar: r.totalCompensar, subtotal: r.subtotal, total: r.total,
+      regra_preco: r.regime === "plano" ? `Plano até ${r.plano.ate_t} t` : "DRE (acima de 5 t)",
+      margem: r.dre.margem,
+    };
+  };
+
   // ---------- início ----------
   montarGrade();
   recarregarTela();

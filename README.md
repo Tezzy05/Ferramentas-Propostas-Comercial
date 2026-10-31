@@ -228,7 +228,10 @@ a meta de cada guia (L1) segue a regra do ano (planilha de regras CONFAZ/MMA).
 ├── templates/index.html
 ├── static/css/app.css
 ├── static/js/app.js
+├── static/js/demo.js            # modo demonstração (GitHub Pages)
+├── docs/                        # demonstração gerada para o GitHub Pages
 ├── scripts/preparar_modelo_ppt.py
+├── scripts/gerar_demo_pages.py  # gera docs/
 ├── iniciar.bat
 └── requirements.txt
 ```
@@ -247,3 +250,29 @@ python app.py
 ```
 
 Abra `http://127.0.0.1:5000`.
+
+## Demonstração (GitHub Pages)
+
+A pasta `docs/` é uma versão de demonstração do painel que roda só no navegador, para
+mostrar a ferramenta por link (ex.: apresentação para a gestão):
+
+- tela, regras e cálculos são os mesmos do app (CONFAZ, recuperação por UF, planos, DRE,
+  cenários de margem, desconto);
+- o registro de propostas fica no navegador de quem acessa e já vem com 5 propostas
+  fictícias em status diferentes (Enviada, Em negociação, Ganha, Perdida);
+- os botões de planilha, PPT e PDF baixam arquivos de exemplo gerados pela própria
+  ferramenta (cliente fictício "Indústria Exemplo Ltda", CONFAZ 2025, margem 15%);
+- "Reiniciar demonstração" (faixa no topo) apaga o que foi preenchido e volta ao registro de exemplo.
+
+Publicar (uma vez): no GitHub, **Settings → Pages → Build and deployment → Source: Deploy
+from a branch → Branch `main`, pasta `/docs` → Save**. O link fica
+`https://tezzy05.github.io/Ferramentas-Propostas-Comercial/`.
+
+Atualizar depois de mudar o app:
+
+```cmd
+python scripts/gerar_demo_pages.py
+```
+
+No Windows com PowerPoint, o PDF de exemplo sai com as fontes oficiais (Neo Sans). Sem
+PowerPoint/LibreOffice, gere o PDF no app e salve em `docs/exemplos/Proposta_Comercial_exemplo.pdf`.
